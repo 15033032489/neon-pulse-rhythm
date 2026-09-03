@@ -22,7 +22,7 @@ export type RuntimeEvent =
       judgement: HitJudgement;
       offsetMs: number;
     }
-  | { kind: "miss"; note: ChartNote; offsetMs: number; units: number }
+  | { kind: "miss"; note: ChartNote; offsetMs: number; scoreUnits: number }
   | { kind: "holdComplete"; note: HoldNote }
   | { kind: "holdBreak"; note: HoldNote; reason: "released" | "regrab-timeout" }
   | { kind: "holdRegrab"; note: HoldNote };
@@ -46,11 +46,13 @@ export class ChartRuntime {
   ];
   private globalCursor = 0;
   private paused = false;
-  private remainingUnits: number;
+  private remainingScoreUnits: number;
+  private remainingNotes: number;
 
   constructor(readonly chart: LoadedChart) {
     this.index = new ChartIndex(chart.notes, chart.notesByLane);
-    this.remainingUnits = chart.totalScoringUnits;
+    this.remainingScoreUnits = chart.totalScoringUnits;
+    this.remainingNotes = chart.noteCount;
     for (const note of chart.notes) this.states.set(note.id, "pending");
   }
 
@@ -59,11 +61,18 @@ export class ChartRuntime {
   }
 
   getRemainingScoringUnits(): number {
-    return this.remainingUnits;
+    return this.remainingScoreUnits;
+  }
+
+  getRemainingSummary(): { noteCount: number; scoreUnits: number } {
+    return {
+      noteCount: this.remainingNotes,
+      scoreUnits: this.remainingScoreUnits,
+    };
   }
 
   isComplete(): boolean {
-    return this.remainingUnits === 0;
+    return this.remainingScoreUnits === 0;
   }
 
   visible(chartTime: number, approachSeconds: number): ChartNote[] {
@@ -110,7 +119,8 @@ export class ChartRuntime {
       if (!judgement) return [];
 
       this.laneCursors[lane] += 1;
-      this.remainingUnits -= 1;
+      this.remainingNotes -= 1;
+      this.remainingScoreUnits -= 1;
       if (note.type === "hold") {
         this.states.set(note.id, "holding");
         this.activeHolds[lane] = {
@@ -150,14 +160,15 @@ export class ChartRuntime {
       this.globalCursor += 1;
       if (this.getState(note.id) !== "pending") continue;
 
-      const units = scoringUnitsForNote(note);
+      const scoreUnits = scoringUnitsForNote(note);
       this.states.set(note.id, "missed");
-      this.remainingUnits -= units;
+      this.remainingNotes -= 1;
+      this.remainingScoreUnits -= scoreUnits;
       events.push({
         kind: "miss",
         note,
         offsetMs: (chartTime - note.time) * 1000,
-        units,
+        scoreUnits,
       });
     }
 
@@ -193,7 +204,7 @@ export class ChartRuntime {
   private completeHold(lane: Lane, active: ActiveHold): RuntimeEvent[] {
     this.activeHolds[lane] = null;
     this.states.set(active.note.id, "completed");
-    this.remainingUnits -= 1;
+    this.remainingScoreUnits -= 1;
     return [{ kind: "holdComplete", note: active.note }];
   }
 
@@ -204,7 +215,7 @@ export class ChartRuntime {
   ): RuntimeEvent[] {
     this.activeHolds[lane] = null;
     this.states.set(active.note.id, "broken");
-    this.remainingUnits -= 1;
+    this.remainingScoreUnits -= 1;
     return [{ kind: "holdBreak", note: active.note, reason }];
   }
 }

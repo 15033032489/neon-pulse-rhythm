@@ -8,6 +8,7 @@ const makeChart = (notes: ChartNote[]): LoadedChart => ({
   difficulty: "normal",
   level: 1,
   notes,
+  noteCount: notes.length,
   song: {
     id: "test",
     title: "Test",
@@ -16,6 +17,7 @@ const makeChart = (notes: ChartNote[]): LoadedChart => ({
     duration: 10,
     subtitle: "Test",
     synthProfile: "chromatic",
+    accent: "cyan",
   },
   totalScoringUnits: notes.reduce(
     (sum, note) => sum + (note.type === "hold" ? 2 : 1),
@@ -79,9 +81,35 @@ describe("Hold 状态机", () => {
     ]);
   });
 
-  it("Hold 头部漏击会一次结算两个计分单位", () => {
+  it("Hold 头部漏击只产生一次主 Miss，但结算两个计分单位", () => {
     const runtime = new ChartRuntime(makeChart([hold]));
-    expect(runtime.update(1.141)).toMatchObject([{ kind: "miss", units: 2 }]);
+    expect(runtime.update(1.141)).toMatchObject([
+      { kind: "miss", scoreUnits: 2 },
+    ]);
+    expect(runtime.getRemainingSummary()).toEqual({
+      noteCount: 0,
+      scoreUnits: 0,
+    });
     expect(runtime.isComplete()).toBe(true);
+  });
+
+  it("同一时刻的不同轨道可同时判定，重复按下不会重复得分", () => {
+    const runtime = new ChartRuntime(
+      makeChart([
+        { id: "a", time: 1, lane: 0, type: "tap" },
+        { id: "b", time: 1, lane: 3, type: "tap" },
+      ]),
+    );
+    expect(runtime.press(0, 1)).toMatchObject([
+      { kind: "judgement", note: { id: "a" } },
+    ]);
+    expect(runtime.press(0, 1)).toEqual([]);
+    expect(runtime.press(3, 1)).toMatchObject([
+      { kind: "judgement", note: { id: "b" } },
+    ]);
+    expect(runtime.getRemainingSummary()).toEqual({
+      noteCount: 0,
+      scoreUnits: 0,
+    });
   });
 });

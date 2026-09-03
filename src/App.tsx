@@ -14,7 +14,7 @@ import { CalibrationPanel } from "./components/CalibrationPanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DifficultySelector } from "./components/DifficultySelector";
 import { ResultPanel } from "./components/ResultPanel";
-import { DEMO_SONG, loadBuiltInChart } from "./charts";
+import { SONG_CATALOG, loadBuiltInChart } from "./charts";
 import {
   analyzeCalibration,
   type CalibrationResult,
@@ -32,11 +32,12 @@ import {
   applyHoldBreak,
   applyHoldCompletion,
   applyJudgement,
+  applyMissedNote,
   calculateAccuracy,
   calculateGrade,
-  calculateNormalizedScore,
   calculateRunFlags,
   createInitialStats,
+  judgementCount,
   RULESET,
   summarizeTiming,
   type GameStats,
@@ -45,16 +46,26 @@ import {
   type RunFlags,
   type TimingSummary,
 } from "./game/scoring";
-import { finalizeRun, type FinishReason } from "./game/session";
 import {
+  calculateSessionScore,
+  createRunSession,
+  finalizeRun,
+  type FinishReason,
+  type RunSession,
+} from "./game/session";
+import {
+  bindingLabel,
+  bindingMap,
+  DEFAULT_LANE_BINDINGS,
   DEFAULT_SETTINGS,
+  isUsableBinding,
   loadSettings,
   saveSettings,
   SETTINGS_LIMITS,
   type GameSettings,
 } from "./game/settings";
 import {
-  LANE_KEYS,
+  summarizeChart,
   type ChartNote,
   type DifficultyId,
   type Lane,
@@ -87,6 +98,11 @@ interface HitEffect {
 }
 
 interface RunResult {
+  songId: string;
+  songTitle: string;
+  difficulty: DifficultyId;
+  noteCount: number;
+  maxScoreUnits: number;
   reason: FinishReason;
   stats: GameStats;
   score: number;
@@ -95,6 +111,7 @@ interface RunResult {
   flags: RunFlags;
   timing: TimingSummary;
   newRecord: boolean;
+  previousBestScore: number;
 }
 
 type NoteStyle = CSSProperties & {
@@ -113,12 +130,6 @@ const FOCUS_PHASES: GamePhase[] = [
   "paused",
   "resuming",
 ];
-const KEY_TO_LANE: Record<string, Lane> = {
-  KeyD: 0,
-  KeyF: 1,
-  KeyJ: 2,
-  KeyK: 3,
-};
 const PHASE_LABELS: Record<GamePhase, string> = {
   idle: "SYSTEM READY",
   starting: "AUDIO BOOT",
@@ -130,17 +141,18 @@ const PHASE_LABELS: Record<GamePhase, string> = {
   results: "RESULTS",
 };
 
-const CHART_RESULTS = {
-  easy: loadBuiltInChart(DEMO_SONG.id, "easy"),
-  normal: loadBuiltInChart(DEMO_SONG.id, "normal"),
-  hard: loadBuiltInChart(DEMO_SONG.id, "hard"),
-} satisfies Record<DifficultyId, ReturnType<typeof loadBuiltInChart>>;
-
-const DIFFICULTY_LEVELS: Record<DifficultyId, number | null> = {
-  easy: CHART_RESULTS.easy.ok ? CHART_RESULTS.easy.chart.level : null,
-  normal: CHART_RESULTS.normal.ok ? CHART_RESULTS.normal.chart.level : null,
-  hard: CHART_RESULTS.hard.ok ? CHART_RESULTS.hard.chart.level : null,
-};
+const DIFFICULTIES: DifficultyId[] = ["easy", "normal", "hard"];
+const BUILT_IN_CHART_RESULTS = Object.fromEntries(
+  SONG_CATALOG.map((song) => [
+    song.id,
+    Object.fromEntries(
+      DIFFICULTIES.map((difficulty) => [
+        difficulty,
+        loadBuiltInChart(song.id, difficulty),
+      ]),
+    ) as Record<DifficultyId, ReturnType<typeof loadBuiltInChart>>,
+  ]),
+) as Record<string, Record<DifficultyId, ReturnType<typeof loadBuiltInChart>>>;
 
 const emptyPressedLanes = (): [boolean, boolean, boolean, boolean] => [
   false,
@@ -155,14 +167,28 @@ const formatTime = (seconds: number) => {
   const safe = Math.max(0, Math.floor(seconds));
   return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 };
+const blocksGameplayInput = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  Boolean(
+    target.closest(
+      "input, textarea, select, [contenteditable='true'], .dialog-backdrop, .settings-panel",
+    ),
+  );
 
 export default function App() {
-  const [difficulty, setDifficulty] = useState<DifficultyId>("normal");
-  const chartResult = CHART_RESULTS[difficulty];
+  const [menuSongId, setMenuSongId] = useState(SONG_CATALOG[0].id);
+  const [menuDifficulty, setMenuDifficulty] = useState<DifficultyId>("normal");
+  const selectedSong =
+    SONG_CATALOG.find((song) => song.id === menuSongId) ?? SONG_CATALOG[0];
+  const chartResults = BUILT_IN_CHART_RESULTS[menuSongId];
+  const chartResult = chartResults[menuDifficulty];
   const chart = chartResult.ok ? chartResult.chart : null;
-  const chartRef = useRef<LoadedChart | null>(chart);
-  chartRef.current = chart;
-
+  const difficultyLevels = Object.fromEntries(
+    DIFFICULTIES.map((value) => [
+      value,
+      chartResults[value].ok ? chartResults[value].chart.level : null,
+    ]),
+  ) as Record<DifficultyId, number | null>;
   const [phase, setPhase] = useState<GamePhase>("idle");
   const phaseRef = useRef<GamePhase>("idle");
   const [stats, setStats] = useState<GameStats>(() => createInitialStats());
@@ -177,9 +203,30 @@ export default function App() {
   const settingsRef = useRef(settings);
   const [records, setRecords] = useState<RecordBook>(() => loadRecords());
   const recordsRef = useRef(records);
+  const difficultyDetails = Object.fromEntries(
+    DIFFICULTIES.map((value) => {
+      const candidate = chartResults[value];
+      return [
+        value,
+        candidate.ok
+          ? {
+              ...summarizeChart(candidate.chart),
+              bestScore:
+                records.entries[recordKey(menuSongId, value)]?.bestScore ?? 0,
+            }
+          : null,
+      ];
+    }),
+  ) as Record<
+    DifficultyId,
+    (ReturnType<typeof summarizeChart> & { bestScore: number }) | null
+  >;
   const [pressedLanes, setPressedLanes] = useState(emptyPressedLanes);
   const [effects, setEffects] = useState<HitEffect[]>([]);
   const [result, setResult] = useState<RunResult | null>(null);
+  const [lastResult, setLastResult] = useState<RunResult | null>(null);
+  const [session, setSession] = useState<RunSession | null>(null);
+  const sessionRef = useRef<RunSession | null>(null);
   const [autoPaused, setAutoPaused] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [uiMessage, setUiMessage] = useState<string | null>(null);
@@ -188,6 +235,12 @@ export default function App() {
   const [fullscreen, setFullscreen] = useState(
     Boolean(document.fullscreenElement),
   );
+  const [bindingLane, setBindingLane] = useState<Lane | null>(null);
+  const [comboMilestone, setComboMilestone] = useState<number | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  const [, setAudioStateRevision] = useState(0);
 
   const [calibrationOpen, setCalibrationOpen] = useState(false);
   const [calibrationRunning, setCalibrationRunning] = useState(false);
@@ -198,6 +251,7 @@ export default function App() {
   const calibrationClockRef = useRef<CalibrationClock | null>(null);
   const calibrationSamplesRef = useRef<CalibrationSample[]>([]);
   const calibrationSeenBeatsRef = useRef(new Set<number>());
+  const calibrationPreviewTimerRef = useRef<number | null>(null);
 
   const engineRef = useRef<SynthEngine | null>(null);
   const runtimeRef = useRef<ChartRuntime | null>(null);
@@ -209,6 +263,8 @@ export default function App() {
   const lastAccessibleActivationRef = useRef<number[]>([0, 0, 0, 0]);
   const effectIdRef = useRef(0);
   const focusLostDuringTransitionRef = useRef(false);
+  const bindingMapRef = useRef(bindingMap(settings.laneBindings));
+  const milestoneTimerRef = useRef<number | null>(null);
   const laneFieldRef = useRef<HTMLDivElement | null>(null);
   const judgeLineRef = useRef<HTMLDivElement | null>(null);
 
@@ -229,7 +285,7 @@ export default function App() {
 
   const laneIsPressed = useCallback((lane: Lane) => {
     for (const code of pressedCodesRef.current)
-      if (KEY_TO_LANE[code] === lane) return true;
+      if (bindingMapRef.current[code] === lane) return true;
     for (const pointerLane of pointerLanesRef.current.values())
       if (pointerLane === lane) return true;
     return accessibleLaneKeysRef.current.has(lane);
@@ -247,6 +303,41 @@ export default function App() {
     accessibleLaneKeysRef.current.clear();
     setPressedLanes(emptyPressedLanes());
   }, []);
+
+  const returnToMenu = useCallback(
+    (completedResult: RunResult | null) => {
+      runIdRef.current += 1;
+      if (completedResult) setLastResult(completedResult);
+      sessionRef.current = null;
+      setSession(null);
+      runtimeRef.current = null;
+      audioStartTimeRef.current = 0;
+      const initialStats = createInitialStats();
+      statsRef.current = initialStats;
+      setStats(initialStats);
+      setEffects([]);
+      setResult(null);
+      setAutoPaused(false);
+      setAbandonOpen(false);
+      setComboMilestone(null);
+      setUiMessage(null);
+      clearPressedInputs();
+      if (milestoneTimerRef.current)
+        window.clearTimeout(milestoneTimerRef.current);
+      milestoneTimerRef.current = null;
+      engineRef.current?.stopAll();
+      void engineRef.current
+        ?.suspend()
+        .finally(() => setAudioStateRevision((revision) => revision + 1));
+      updateClock({
+        rawTime: 0,
+        chartTime: 0,
+        frameTime: performance.now(),
+      });
+      setGamePhase("idle");
+    },
+    [clearPressedInputs, setGamePhase, updateClock],
+  );
 
   const readAudioClock = useCallback((): ClockSnapshot => {
     const engine = engineRef.current;
@@ -282,33 +373,41 @@ export default function App() {
   const finishGame = useCallback(
     (reason: FinishReason) => {
       if (phaseRef.current === "idle" || phaseRef.current === "results") return;
-      const currentChart = chartRef.current;
-      if (!currentChart) return;
+      const currentSession = sessionRef.current;
+      if (!currentSession) return;
       runIdRef.current += 1;
       const finalized = finalizeRun(
         statsRef.current,
-        runtimeRef.current?.getRemainingScoringUnits() ?? 0,
+        runtimeRef.current?.getRemainingSummary() ?? {
+          noteCount: 0,
+          scoreUnits: 0,
+        },
         reason,
       );
       statsRef.current = finalized.stats;
       setStats(finalized.stats);
-      const accuracy = calculateAccuracy(finalized.stats);
-      const score = calculateNormalizedScore(
+      const accuracy = calculateAccuracy(
         finalized.stats,
-        currentChart.totalScoringUnits,
+        currentSession.maxScoreUnits,
       );
+      const score = calculateSessionScore(finalized.stats, currentSession);
       const grade = calculateGrade(accuracy);
       const flags = calculateRunFlags(
         finalized.stats,
-        currentChart.totalScoringUnits,
+        currentSession.noteCount,
+        currentSession.maxScoreUnits,
       );
       let newRecord = false;
+      const previousBestScore =
+        recordsRef.current.entries[
+          recordKey(currentSession.songId, currentSession.difficulty)
+        ]?.bestScore ?? 0;
 
       if (finalized.shouldPersist) {
         const merged = mergeRecord(
           recordsRef.current,
-          currentChart.song.id,
-          currentChart.difficulty,
+          currentSession.songId,
+          currentSession.difficulty,
           {
             score,
             accuracy,
@@ -324,6 +423,11 @@ export default function App() {
       }
 
       setResult({
+        songId: currentSession.songId,
+        songTitle: currentSession.songTitle,
+        difficulty: currentSession.difficulty,
+        noteCount: currentSession.noteCount,
+        maxScoreUnits: currentSession.maxScoreUnits,
         reason,
         stats: finalized.stats,
         score,
@@ -332,11 +436,14 @@ export default function App() {
         flags,
         timing: summarizeTiming(finalized.stats.timingOffsetsMs),
         newRecord,
+        previousBestScore,
       });
       setAbandonOpen(false);
       clearPressedInputs();
       engineRef.current?.stopAll();
-      void engineRef.current?.suspend();
+      void engineRef.current
+        ?.suspend()
+        .finally(() => setAudioStateRevision((revision) => revision + 1));
       setGamePhase("results");
     },
     [clearPressedInputs, setGamePhase],
@@ -346,6 +453,7 @@ export default function App() {
     (events: RuntimeEvent[]) => {
       if (!events.length) return;
       let next = statsRef.current;
+      const previousCombo = statsRef.current.combo;
       for (const event of events) {
         if (event.kind === "judgement") {
           next = applyJudgement(next, event.judgement, event.offsetMs);
@@ -356,15 +464,22 @@ export default function App() {
             event.offsetMs,
           );
           engineRef.current?.playHit(event.note.lane, event.judgement);
+          if (
+            settingsRef.current.haptics &&
+            !reducedMotion &&
+            typeof navigator.vibrate === "function"
+          ) {
+            navigator.vibrate(event.judgement === "perfect" ? 10 : 6);
+          }
         } else if (event.kind === "miss") {
-          for (let unit = 0; unit < event.units; unit += 1)
-            next = applyJudgement(next, "miss");
+          next = applyMissedNote(next, event.scoreUnits);
           addEffect(
             event.note.lane,
             "miss",
             event.note.type === "hold" ? "HOLD MISS" : "MISS",
             null,
           );
+          engineRef.current?.playMiss(event.note.lane);
         } else if (event.kind === "holdComplete") {
           next = applyHoldCompletion(next);
           addEffect(event.note.lane, "perfect", "HOLD COMPLETE", null);
@@ -377,15 +492,25 @@ export default function App() {
             event.reason === "released" ? "HOLD BREAK" : "REGRAB MISSED",
             null,
           );
+          engineRef.current?.playMiss(event.note.lane);
         } else {
           addEffect(event.note.lane, "great", "HOLD REGRAB", null);
         }
       }
       statsRef.current = next;
       setStats(next);
+      if (next.combo !== previousCombo && [50, 100, 200].includes(next.combo)) {
+        setComboMilestone(next.combo);
+        if (milestoneTimerRef.current)
+          window.clearTimeout(milestoneTimerRef.current);
+        milestoneTimerRef.current = window.setTimeout(
+          () => setComboMilestone(null),
+          900,
+        );
+      }
       if (next.life <= 0) finishGame("failed");
     },
-    [addEffect, finishGame],
+    [addEffect, finishGame, reducedMotion],
   );
 
   const pressLane = useCallback(
@@ -412,62 +537,69 @@ export default function App() {
     [commitRuntimeEvents, laneIsPressed, readAudioClock],
   );
 
-  const startGame = useCallback(async () => {
-    const currentChart = chartRef.current;
-    if (!currentChart) {
-      setAudioError(
-        chartResult.ok ? "当前谱面不可用。" : chartResult.errors.join(" "),
-      );
-      return;
-    }
-    const runId = runIdRef.current + 1;
-    runIdRef.current = runId;
-    focusLostDuringTransitionRef.current = document.hidden;
-    setGamePhase("starting");
-    clearPressedInputs();
-    const initialStats = createInitialStats();
-    statsRef.current = initialStats;
-    setStats(initialStats);
-    runtimeRef.current = new ChartRuntime(currentChart);
-    setEffects([]);
-    setResult(null);
-    setAudioError(null);
-    setUiMessage(null);
-    setAutoPaused(false);
-
-    try {
-      const engine = getEngine();
-      engine.setVolumes(settingsRef.current);
-      const startTime = await engine.start(currentChart, 3);
-      if (runId !== runIdRef.current) return;
-      audioStartTimeRef.current = startTime;
-      updateClock(readAudioClock());
-      if (focusLostDuringTransitionRef.current || document.hidden) {
-        runtimeRef.current.pause();
-        await engine.suspend();
-        if (runId !== runIdRef.current) return;
-        updateClock(readAudioClock());
-        setAutoPaused(true);
-        setGamePhase("paused");
+  const startGame = useCallback(
+    async (requestedChart?: LoadedChart) => {
+      const currentChart = requestedChart ?? chart;
+      if (!currentChart) {
+        setAudioError(
+          chartResult.ok ? "当前谱面不可用。" : chartResult.errors.join(" "),
+        );
         return;
       }
-      setGamePhase("countdown");
-    } catch (error) {
-      if (runId !== runIdRef.current) return;
-      engineRef.current?.stopAll();
-      setAudioError(
-        error instanceof Error ? error.message : "浏览器无法启动音频系统。",
-      );
-      setGamePhase("idle");
-    }
-  }, [
-    chartResult,
-    clearPressedInputs,
-    getEngine,
-    readAudioClock,
-    setGamePhase,
-    updateClock,
-  ]);
+      const runId = runIdRef.current + 1;
+      runIdRef.current = runId;
+      focusLostDuringTransitionRef.current = document.hidden;
+      setGamePhase("starting");
+      clearPressedInputs();
+      const nextSession = createRunSession(currentChart);
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      const initialStats = createInitialStats();
+      statsRef.current = initialStats;
+      setStats(initialStats);
+      runtimeRef.current = new ChartRuntime(currentChart);
+      setEffects([]);
+      setResult(null);
+      setAudioError(null);
+      setUiMessage(null);
+      setAutoPaused(false);
+
+      try {
+        const engine = getEngine();
+        engine.setVolumes(settingsRef.current);
+        const startTime = await engine.start(currentChart, 3);
+        if (runId !== runIdRef.current) return;
+        audioStartTimeRef.current = startTime;
+        updateClock(readAudioClock());
+        if (focusLostDuringTransitionRef.current || document.hidden) {
+          runtimeRef.current.pause();
+          await engine.suspend();
+          if (runId !== runIdRef.current) return;
+          updateClock(readAudioClock());
+          setAutoPaused(true);
+          setGamePhase("paused");
+          return;
+        }
+        setGamePhase("countdown");
+      } catch (error) {
+        if (runId !== runIdRef.current) return;
+        engineRef.current?.stopAll();
+        setAudioError(
+          error instanceof Error ? error.message : "浏览器无法启动音频系统。",
+        );
+        setGamePhase("idle");
+      }
+    },
+    [
+      chart,
+      chartResult,
+      clearPressedInputs,
+      getEngine,
+      readAudioClock,
+      setGamePhase,
+      updateClock,
+    ],
+  );
 
   const pauseGame = useCallback(
     async (automatic = false) => {
@@ -569,7 +701,11 @@ export default function App() {
       beatIndex,
       deviationMs: (now - expected) * 1000,
     });
-    setCalibrationTapCount(calibrationSamplesRef.current.length);
+    setCalibrationTapCount(
+      calibrationSamplesRef.current.filter(
+        (sample) => sample.beatIndex >= calibrationClock.warmupBeats,
+      ).length,
+    );
   }, []);
 
   const startCalibration = useCallback(async () => {
@@ -578,6 +714,9 @@ export default function App() {
       engine.setVolumes(settingsRef.current);
       calibrationSamplesRef.current = [];
       calibrationSeenBeatsRef.current.clear();
+      if (calibrationPreviewTimerRef.current)
+        window.clearTimeout(calibrationPreviewTimerRef.current);
+      calibrationPreviewTimerRef.current = null;
       setCalibrationTapCount(0);
       setCalibrationResult(null);
       calibrationClockRef.current = await engine.startCalibration();
@@ -589,24 +728,81 @@ export default function App() {
         recommendedOffsetMs: 0,
         acceptedSamples: [],
         ignoredCount: 0,
+        medianDeviationMs: 0,
         message: error instanceof Error ? error.message : "无法启动校准音频。",
       });
     }
   }, [getEngine]);
 
-  const closeCalibration = useCallback(() => {
+  const stopCalibration = useCallback(async (closePanel: boolean) => {
     calibrationRunningRef.current = false;
     setCalibrationRunning(false);
     calibrationClockRef.current = null;
+    calibrationSamplesRef.current = [];
+    calibrationSeenBeatsRef.current.clear();
+    setCalibrationTapCount(0);
+    if (calibrationPreviewTimerRef.current)
+      window.clearTimeout(calibrationPreviewTimerRef.current);
+    calibrationPreviewTimerRef.current = null;
     engineRef.current?.stopAll();
-    setCalibrationOpen(false);
+    if (!FOCUS_PHASES.includes(phaseRef.current)) {
+      try {
+        await engineRef.current?.suspend();
+        setAudioStateRevision((revision) => revision + 1);
+      } catch {
+        // Calibration cleanup must never block the menu.
+      }
+    }
+    if (closePanel) {
+      setCalibrationResult(null);
+      setCalibrationOpen(false);
+    }
   }, []);
+
+  const closeCalibration = useCallback(() => {
+    void stopCalibration(true);
+  }, [stopCalibration]);
+
+  const previewCalibration = useCallback(async () => {
+    try {
+      const engine = getEngine();
+      engine.setVolumes(settingsRef.current);
+      await engine.playCalibrationPreview();
+      if (calibrationPreviewTimerRef.current)
+        window.clearTimeout(calibrationPreviewTimerRef.current);
+      calibrationPreviewTimerRef.current = window.setTimeout(() => {
+        engine.stopAll();
+        void engine
+          .suspend()
+          .finally(() => setAudioStateRevision((revision) => revision + 1));
+        calibrationPreviewTimerRef.current = null;
+        setCalibrationRunning(false);
+      }, 2300);
+    } catch (error) {
+      setCalibrationResult({
+        ok: false,
+        recommendedOffsetMs: 0,
+        acceptedSamples: [],
+        ignoredCount: 0,
+        medianDeviationMs: 0,
+        message: error instanceof Error ? error.message : "无法播放试听节拍。",
+      });
+    }
+  }, [getEngine]);
 
   useEffect(() => {
     settingsRef.current = settings;
+    bindingMapRef.current = bindingMap(settings.laneBindings);
     saveSettings(settings);
     engineRef.current?.setVolumes(settings);
   }, [settings]);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
 
   useEffect(() => {
     recordsRef.current = records;
@@ -677,7 +873,8 @@ export default function App() {
         if (
           phaseRef.current === "playing" &&
           (runtime?.isComplete() ||
-            nextClock.rawTime >= (chartRef.current?.song.duration ?? 0) + 0.25)
+            nextClock.rawTime >=
+              (sessionRef.current?.chart.song.duration ?? 0) + 0.25)
         ) {
           finishGame("complete");
           return;
@@ -711,9 +908,15 @@ export default function App() {
         (total - 1) * calibrationClock.beatDuration +
         0.32;
       if (engine.getCurrentTime() >= endTime) {
+        const analyzed = analyzeCalibration(calibrationSamplesRef.current);
         calibrationRunningRef.current = false;
         setCalibrationRunning(false);
-        setCalibrationResult(analyzeCalibration(calibrationSamplesRef.current));
+        calibrationClockRef.current = null;
+        engine.stopAll();
+        void engine
+          .suspend()
+          .finally(() => setAudioStateRevision((revision) => revision + 1));
+        setCalibrationResult(analyzed);
         return;
       }
       animationFrame = requestAnimationFrame(tick);
@@ -742,10 +945,40 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (bindingLane !== null) {
+        if (event.repeat) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.code === "Escape") {
+          setBindingLane(null);
+          return;
+        }
+        if (!isUsableBinding(event.code)) {
+          setUiMessage("该按键保留给界面操作，请选择其他按键。");
+          return;
+        }
+        const conflict = settingsRef.current.laneBindings.findIndex(
+          (code, lane) => code === event.code && lane !== bindingLane,
+        );
+        if (conflict >= 0) {
+          setUiMessage(
+            `${bindingLabel(event.code)} 已用于第 ${conflict + 1} 轨，不能重复。`,
+          );
+          return;
+        }
+        const nextBindings = [
+          ...settingsRef.current.laneBindings,
+        ] as GameSettings["laneBindings"];
+        nextBindings[bindingLane] = event.code;
+        updateSetting("laneBindings", nextBindings);
+        setBindingLane(null);
+        return;
+      }
       if (calibrationOpen) {
         if (
           !event.repeat &&
-          (event.code === "Space" || KEY_TO_LANE[event.code] !== undefined)
+          (event.code === "Space" ||
+            bindingMapRef.current[event.code] !== undefined)
         ) {
           event.preventDefault();
           recordCalibrationTap();
@@ -753,13 +986,15 @@ export default function App() {
         if (event.code === "Escape" && !event.repeat) closeCalibration();
         return;
       }
+      if (blocksGameplayInput(event.target)) return;
       if (event.code === "Escape" && !event.repeat) {
         if (abandonOpen) setAbandonOpen(false);
         else if (ACTIVE_PHASES.includes(phaseRef.current))
           void pauseGame(false);
         return;
       }
-      const lane = KEY_TO_LANE[event.code];
+      if (abandonOpen) return;
+      const lane = bindingMapRef.current[event.code];
       if (lane === undefined) return;
       event.preventDefault();
       if (event.repeat || pressedCodesRef.current.has(event.code)) return;
@@ -768,7 +1003,7 @@ export default function App() {
       pressLane(lane);
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      const lane = KEY_TO_LANE[event.code];
+      const lane = bindingMapRef.current[event.code];
       if (lane === undefined) return;
       pressedCodesRef.current.delete(event.code);
       refreshPressedLanes();
@@ -782,6 +1017,7 @@ export default function App() {
     };
   }, [
     abandonOpen,
+    bindingLane,
     calibrationOpen,
     closeCalibration,
     pauseGame,
@@ -791,7 +1027,20 @@ export default function App() {
     releaseLane,
   ]);
 
-  useEffect(() => () => engineRef.current?.dispose(), []);
+  useEffect(
+    () => () => {
+      if (milestoneTimerRef.current)
+        window.clearTimeout(milestoneTimerRef.current);
+      if (calibrationPreviewTimerRef.current)
+        window.clearTimeout(calibrationPreviewTimerRef.current);
+      calibrationRunningRef.current = false;
+      calibrationClockRef.current = null;
+      calibrationSamplesRef.current = [];
+      calibrationSeenBeatsRef.current.clear();
+      engineRef.current?.dispose();
+    },
+    [],
+  );
 
   const handlePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>, lane: Lane) => {
@@ -843,17 +1092,18 @@ export default function App() {
   );
 
   const approachSeconds = BASE_APPROACH_SECONDS / settings.noteSpeed;
+  const visualChartTime = clock.rawTime - settings.visualOffsetMs / 1000;
   const visibleNotes = useMemo(() => {
     if (!runtimeRef.current || phase === "idle" || phase === "results")
       return [];
-    return runtimeRef.current.visible(clock.chartTime, approachSeconds);
-  }, [approachSeconds, clock.chartTime, phase, stats.judgedUnits]);
+    return runtimeRef.current.visible(visualChartTime, approachSeconds);
+  }, [approachSeconds, phase, stats.judgedNotes, visualChartTime]);
 
-  const liveAccuracy = calculateAccuracy(stats);
-  const liveScore = chart
-    ? calculateNormalizedScore(stats, chart.totalScoringUnits)
+  const liveAccuracy = session ? calculateAccuracy(stats) : 100;
+  const liveScore = session ? calculateSessionScore(stats, session) : 0;
+  const progress = session
+    ? clamp(clock.rawTime / session.chart.song.duration, 0, 1)
     : 0;
-  const progress = chart ? clamp(clock.rawTime / chart.song.duration, 0, 1) : 0;
   const latestEffect = effects.at(-1);
   const countdownValue = clock.rawTime > -1 ? 1 : clock.rawTime > -2 ? 2 : 3;
   const isBusy = ["starting", "pausing", "resuming"].includes(phase);
@@ -863,6 +1113,13 @@ export default function App() {
   const selectedRecord = chart
     ? records.entries[recordKey(chart.song.id, chart.difficulty)]
     : undefined;
+  const displayedResult = phase === "results" ? result : lastResult;
+  const panelStats = displayedResult?.stats ?? stats;
+  const panelScore = displayedResult?.score ?? liveScore;
+  const panelAccuracy = displayedResult?.accuracy ?? liveAccuracy;
+  const panelMode = displayedResult && !isSessionActive ? "last" : "live";
+  const stageSong = session?.chart.song ?? selectedSong;
+  const stageDifficulty = session?.difficulty ?? menuDifficulty;
 
   const updateSetting = <Key extends keyof GameSettings>(
     key: Key,
@@ -877,7 +1134,7 @@ export default function App() {
       state === "holding"
         ? 1
         : clamp(
-            1 - (note.time - clock.chartTime) / approachSeconds,
+            1 - (note.time - visualChartTime) / approachSeconds,
             -0.05,
             1.08,
           );
@@ -899,7 +1156,7 @@ export default function App() {
       );
     }
     const tailProgress = clamp(
-      1 - (note.time + note.duration - clock.chartTime) / approachSeconds,
+      1 - (note.time + note.duration - visualChartTime) / approachSeconds,
       -0.08,
       1.08,
     );
@@ -907,9 +1164,12 @@ export default function App() {
       24,
       (headProgress - tailProgress) * noteTravelPixels,
     );
+    const holdEnding =
+      state === "holding" &&
+      note.time + note.duration - visualChartTime <= 0.45;
     return (
       <div
-        className={`falling-note is-hold ${state === "holding" ? "is-held" : ""}`}
+        className={`falling-note is-hold ${state === "holding" ? "is-held" : ""} ${holdEnding ? "is-ending" : ""}`}
         data-note-type="hold"
         key={note.id}
         style={
@@ -956,7 +1216,13 @@ export default function App() {
           <span
             className={`status-dot ${audioState === "running" ? "is-live" : ""}`}
           />
-          <span>{PHASE_LABELS[phase]}</span>
+          <span>
+            {calibrationOpen
+              ? calibrationRunning
+                ? "CALIBRATING"
+                : "CALIBRATION READY"
+              : PHASE_LABELS[phase]}
+          </span>
           <b>
             {audioState === "uninitialized"
               ? "AUDIO STANDBY"
@@ -975,33 +1241,42 @@ export default function App() {
       )}
 
       <section className="game-layout" aria-label="Neon Pulse 四键节奏游戏台">
-        <aside className="side-card stats-card" aria-label="实时成绩">
+        <aside
+          className="side-card stats-card"
+          aria-label={panelMode === "live" ? "实时成绩" : "上一局结果"}
+        >
           <div className="card-heading">
-            <span className="card-label">LIVE DATA</span>
-            <span className="tiny-index">01 / STATUS</span>
+            <span className="card-label">
+              {panelMode === "live" ? "实时数据" : "上一局结果"}
+            </span>
+            <span className="tiny-index">
+              {displayedResult
+                ? `${displayedResult.songTitle} · ${displayedResult.difficulty.toUpperCase()}`
+                : "等待开始"}
+            </span>
           </div>
           <div className="score-block">
             <span>SCORE / 1M</span>
-            <strong data-testid="score">{formatScore(liveScore)}</strong>
+            <strong data-testid="score">{formatScore(panelScore)}</strong>
           </div>
           <div className="primary-stats">
             <div>
               <span>COMBO</span>
-              <strong data-testid="combo">{stats.combo}</strong>
+              <strong data-testid="combo">{panelStats.combo}</strong>
             </div>
             <div>
               <span>MAX COMBO</span>
-              <strong>{stats.maxCombo}</strong>
+              <strong>{panelStats.maxCombo}</strong>
             </div>
             <div>
               <span>ACCURACY</span>
-              <strong>{liveAccuracy.toFixed(2)}%</strong>
+              <strong>{panelAccuracy.toFixed(2)}%</strong>
             </div>
           </div>
           <div className="life-readout">
             <div>
               <span>SIGNAL / LIFE</span>
-              <b>{stats.life}%</b>
+              <b>{panelStats.life}%</b>
             </div>
             <div
               className="life-track"
@@ -1009,9 +1284,9 @@ export default function App() {
               aria-label="生命值"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={stats.life}
+              aria-valuenow={panelStats.life}
             >
-              <span style={{ width: `${stats.life}%` }} />
+              <span style={{ width: `${panelStats.life}%` }} />
             </div>
           </div>
           <div className="judgement-list" aria-label="判定统计">
@@ -1019,44 +1294,69 @@ export default function App() {
               (judgement) => (
                 <div key={judgement} className={`count-${judgement}`}>
                   <span>{judgement.toUpperCase()}</span>
-                  <b>{String(stats.counts[judgement]).padStart(2, "0")}</b>
+                  <b>{String(panelStats.counts[judgement]).padStart(2, "0")}</b>
                 </div>
               ),
             )}
           </div>
           <div className="hold-readout">
             <span>
-              HOLD COMPLETE <b>{stats.holdCompleted}</b>
+              HOLD COMPLETE <b>{panelStats.holdCompleted}</b>
             </span>
             <span>
-              BREAK <b>{stats.holdBroken}</b>
+              BREAK <b>{panelStats.holdBroken}</b>
+            </span>
+            <span>
+              主判定 <b>{judgementCount(panelStats)}</b>
+              {displayedResult ? ` / ${displayedResult.noteCount}` : ""}
             </span>
           </div>
-          <div className="time-readout">
-            <span>{formatTime(clock.rawTime)}</span>
-            <i>
-              <b style={{ transform: `scaleX(${progress})` }} />
-            </i>
-            <span>{formatTime(chart?.song.duration ?? 0)}</span>
-          </div>
+          {panelMode === "live" && (
+            <div className="time-readout">
+              <span>{formatTime(clock.rawTime)}</span>
+              <i>
+                <b style={{ transform: `scaleX(${progress})` }} />
+              </i>
+              <span>{formatTime(session?.chart.song.duration ?? 0)}</span>
+            </div>
+          )}
         </aside>
 
-        <section className="stage-card" aria-label="演奏区域">
+        <section
+          className={`stage-card ${
+            settings.screenShake &&
+            settings.effectIntensity > 0 &&
+            !reducedMotion &&
+            latestEffect &&
+            clock.frameTime - latestEffect.bornAt < 180
+              ? `shake-${latestEffect.judgement}`
+              : ""
+          }`}
+          style={
+            { "--effect-intensity": settings.effectIntensity } as CSSProperties
+          }
+          aria-label="演奏区域"
+        >
           <div className="stage-topline">
             <div>
               <span>NOW PLAYING</span>
               <b>
-                {DEMO_SONG.title} · {difficulty.toUpperCase()}
+                {stageSong.title} · {stageDifficulty.toUpperCase()}
               </b>
             </div>
             <div className="stage-live-stats">
               <span>
-                {liveAccuracy.toFixed(1)}% · LIFE {stats.life}
+                SCORE <b>{formatScore(liveScore)}</b>
               </span>
-              <b>
-                {stats.combo}
-                <small> COMBO</small>
-              </b>
+              <span>
+                ACC <b>{liveAccuracy.toFixed(1)}%</b>
+              </span>
+              <span className={stats.life < 30 ? "is-low-life" : ""}>
+                LIFE <b>{stats.life}%</b>
+              </span>
+              <span>
+                {stageDifficulty.toUpperCase()} · {Math.round(progress * 100)}%
+              </span>
             </div>
             <div className="stage-toolbar">
               {ACTIVE_PHASES.includes(phase) && (
@@ -1091,8 +1391,9 @@ export default function App() {
             data-visible-notes={visibleNotes.length}
           >
             <div className="perspective-grid" aria-hidden="true" />
-            {LANE_KEYS.map((key, laneIndex) => {
+            {settings.laneBindings.map((code, laneIndex) => {
               const lane = laneIndex as Lane;
+              const key = bindingLabel(code);
               const laneEffect = [...effects]
                 .reverse()
                 .find(
@@ -1140,6 +1441,18 @@ export default function App() {
                 </div>
               );
             })}
+
+            {FOCUS_PHASES.includes(phase) && (
+              <div
+                className={`combo-hud ${stats.combo === 0 ? "is-zero" : ""} ${comboMilestone ? "is-milestone" : ""}`}
+                aria-live="polite"
+              >
+                <strong>{stats.combo}</strong>
+                <span>
+                  {comboMilestone ? `${comboMilestone} MILESTONE` : "COMBO"}
+                </span>
+              </div>
+            )}
 
             <div className="judge-line" ref={judgeLineRef} aria-hidden="true">
               <span>SYNC</span>
@@ -1189,26 +1502,27 @@ export default function App() {
                   <i /> ORIGINAL SYNTH TRACK
                 </div>
                 <h2>
-                  CHROMATIC
+                  {selectedSong.title.split(" ")[0].toUpperCase()}
                   <br />
-                  <em>RUN</em>
+                  <em>
+                    {selectedSong.title
+                      .split(" ")
+                      .slice(1)
+                      .join(" ")
+                      .toUpperCase()}
+                  </em>
                 </h2>
-                <p>{DEMO_SONG.subtitle}</p>
-                <DifficultySelector
-                  value={difficulty}
-                  levels={DIFFICULTY_LEVELS}
-                  onChange={setDifficulty}
-                />
+                <p>{selectedSong.subtitle}</p>
                 {chart && (
                   <div className="intro-specs">
                     <span>
                       <b>{chart.song.bpm}</b> BPM
                     </span>
                     <span>
-                      <b>{chart.notes.length}</b> NOTES
+                      <b>{chart.noteCount}</b> 音符
                     </span>
                     <span>
-                      <b>LV.{chart.level}</b> {difficulty.toUpperCase()}
+                      <b>LV.{chart.level}</b> {menuDifficulty.toUpperCase()}
                     </span>
                   </div>
                 )}
@@ -1225,16 +1539,7 @@ export default function App() {
                     {chartResult.warnings.join(" ")}
                   </p>
                 )}
-                <button
-                  type="button"
-                  className="start-button"
-                  onClick={() => void startGame()}
-                  disabled={!chart}
-                >
-                  <span>START SESSION</span>
-                  <i>▶</i>
-                </button>
-                <small>D · F · J · K / MOUSE / MULTI-TOUCH</small>
+                <small>在歌曲面板选择曲目与难度，然后开始演奏</small>
               </div>
             )}
 
@@ -1293,23 +1598,25 @@ export default function App() {
             {phase === "results" && result && (
               <ResultPanel
                 {...result}
-                onReplay={() => void startGame()}
-                onBack={() => {
-                  setResult(null);
-                  setGamePhase("idle");
-                  updateClock({
-                    rawTime: 0,
-                    chartTime: 0,
-                    frameTime: performance.now(),
-                  });
+                onReplay={() => {
+                  const replay = loadBuiltInChart(
+                    result.songId,
+                    result.difficulty,
+                  );
+                  if (replay.ok) {
+                    setMenuSongId(result.songId);
+                    setMenuDifficulty(result.difficulty);
+                    void startGame(replay.chart);
+                  }
                 }}
+                onBack={() => returnToMenu(result)}
               />
             )}
           </div>
 
           <div className="stage-footer">
             <span>
-              INPUT <b>D F J K</b>
+              INPUT <b>{settings.laneBindings.map(bindingLabel).join(" ")}</b>
             </span>
             <span>
               OFFSET{" "}
@@ -1321,6 +1628,13 @@ export default function App() {
             <span>
               SPEED <b>{settings.noteSpeed.toFixed(2)}×</b>
             </span>
+            <span>
+              VISUAL{" "}
+              <b>
+                {settings.visualOffsetMs >= 0 ? "+" : ""}
+                {settings.visualOffsetMs}ms
+              </b>
+            </span>
           </div>
         </section>
 
@@ -1329,31 +1643,56 @@ export default function App() {
             <span className="card-label">CONTROL DECK</span>
             <span className="tiny-index">02 / CONFIG</span>
           </div>
-          <div className="track-card">
-            <span className="track-number">NP / 001</span>
-            <div className="track-art" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
+          <div className="song-selector" aria-label="选择歌曲">
+            {SONG_CATALOG.map((song, index) => (
+              <button
+                type="button"
+                className={song.id === menuSongId ? "is-selected" : ""}
+                onClick={() => setMenuSongId(song.id)}
+                disabled={isSettingsLocked}
+                aria-pressed={song.id === menuSongId}
+                key={song.id}
+              >
+                <span
+                  className={`song-art art-${song.accent}`}
+                  aria-hidden="true"
+                >
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <span>
+                  <small>NP / {String(index + 1).padStart(3, "0")}</small>
+                  <b>{song.title}</b>
+                  <em>{song.artist}</em>
+                </span>
+                <span className="song-meta">
+                  {song.bpm} BPM · {formatTime(song.duration)}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="track-card selected-track-summary">
+            <span className="track-number">SELECTED TRACK</span>
             <div>
-              <h2>{DEMO_SONG.title}</h2>
-              <p>{DEMO_SONG.artist}</p>
+              <h2>{selectedSong.title}</h2>
+              <p>{selectedSong.subtitle}</p>
             </div>
             <div className="track-tags">
-              <span>{DEMO_SONG.bpm} BPM</span>
+              <span>{selectedSong.bpm} BPM</span>
+              <span>{formatTime(selectedSong.duration)}</span>
               <span>
-                {difficulty.toUpperCase()}{" "}
+                {menuDifficulty.toUpperCase()}{" "}
                 {chart ? `LV.${chart.level}` : "ERROR"}
               </span>
             </div>
           </div>
           <DifficultySelector
-            value={difficulty}
-            levels={DIFFICULTY_LEVELS}
+            value={menuDifficulty}
+            levels={difficultyLevels}
+            details={difficultyDetails}
             disabled={isSettingsLocked}
-            onChange={setDifficulty}
+            onChange={setMenuDifficulty}
           />
           {selectedRecord && (
             <div className="best-record">
@@ -1427,18 +1766,18 @@ export default function App() {
 
           <div className="settings-panel">
             <div className="settings-heading">
-              <span>PLAY / SOUND SETTINGS</span>
+              <span>演奏与声音设置</span>
               <button
                 type="button"
                 onClick={() => setSettings(DEFAULT_SETTINGS)}
                 disabled={isSettingsLocked}
               >
-                RESET
+                全部重置
               </button>
             </div>
             <label className="range-control">
               <span>
-                <b>NOTE SPEED</b>
+                <b>音符速度</b>
                 <output>{settings.noteSpeed.toFixed(2)}×</output>
               </span>
               <input
@@ -1453,12 +1792,12 @@ export default function App() {
                 }
               />
               <small>
-                SLOWER <i /> FASTER
+                慢 <i /> 快
               </small>
             </label>
             <label className="range-control">
               <span>
-                <b>AUDIO OFFSET</b>
+                <b>判定偏移</b>
                 <output>
                   {settings.audioOffsetMs >= 0 ? "+" : ""}
                   {settings.audioOffsetMs}ms
@@ -1476,17 +1815,40 @@ export default function App() {
                 }
               />
               <small>
-                EARLIER <i /> LATER
+                更早 <i /> 更晚
+              </small>
+            </label>
+            <label className="range-control">
+              <span>
+                <b>视觉偏移</b>
+                <output>
+                  {settings.visualOffsetMs >= 0 ? "+" : ""}
+                  {settings.visualOffsetMs}ms
+                </output>
+              </span>
+              <input
+                type="range"
+                min={SETTINGS_LIMITS.visualOffsetMs.minimum}
+                max={SETTINGS_LIMITS.visualOffsetMs.maximum}
+                step="5"
+                value={settings.visualOffsetMs}
+                disabled={isSettingsLocked}
+                onChange={(event) =>
+                  updateSetting("visualOffsetMs", Number(event.target.value))
+                }
+              />
+              <small>
+                更早显示 <i /> 更晚显示
               </small>
             </label>
             <p className="offset-help">
-              正值让谱面/判定更晚，负值让它们更早；所有设置保存在当前设备。
+              判定偏移只改变按键时机，视觉偏移只改变音符位置。正值更晚，负值更早。
             </p>
             {(
               [
-                ["masterVolume", "MASTER"],
-                ["musicVolume", "MUSIC"],
-                ["hitVolume", "HIT SFX"],
+                ["masterVolume", "主音量"],
+                ["musicVolume", "音乐音量"],
+                ["hitVolume", "打击音量"],
               ] as const
             ).map(([key, label]) => (
               <label className="range-control volume-control" key={key}>
@@ -1506,6 +1868,81 @@ export default function App() {
                 />
               </label>
             ))}
+            <label className="range-control volume-control">
+              <span>
+                <b>特效强度</b>
+                <output>{Math.round(settings.effectIntensity * 100)}%</output>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={settings.effectIntensity}
+                onChange={(event) =>
+                  updateSetting("effectIntensity", Number(event.target.value))
+                }
+              />
+            </label>
+            <div className="toggle-grid">
+              <button
+                type="button"
+                className={settings.screenShake ? "is-on" : ""}
+                onClick={() =>
+                  updateSetting("screenShake", !settings.screenShake)
+                }
+                aria-pressed={settings.screenShake}
+              >
+                轻微震屏 {settings.screenShake ? "开" : "关"}
+              </button>
+              <button
+                type="button"
+                className={settings.haptics ? "is-on" : ""}
+                onClick={() => updateSetting("haptics", !settings.haptics)}
+                aria-pressed={settings.haptics}
+              >
+                触觉反馈 {settings.haptics ? "开" : "关"}
+              </button>
+            </div>
+            <div className="key-settings" aria-label="自定义键位">
+              <div>
+                <b>四轨键位</b>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateSetting("laneBindings", [...DEFAULT_LANE_BINDINGS])
+                  }
+                  disabled={isSettingsLocked}
+                >
+                  恢复 D/F/J/K
+                </button>
+              </div>
+              <div className="key-binding-grid">
+                {settings.laneBindings.map((code, laneIndex) => {
+                  const lane = laneIndex as Lane;
+                  return (
+                    <button
+                      type="button"
+                      className={bindingLane === lane ? "is-listening" : ""}
+                      onClick={() => setBindingLane(lane)}
+                      disabled={isSettingsLocked}
+                      aria-label={`设置第 ${lane + 1} 轨按键，当前 ${bindingLabel(code)}`}
+                      key={lane}
+                    >
+                      <small>轨道 {lane + 1}</small>
+                      <kbd>
+                        {bindingLane === lane ? "…" : bindingLabel(code)}
+                      </kbd>
+                    </button>
+                  );
+                })}
+              </div>
+              {bindingLane !== null && (
+                <p role="status">
+                  请按下第 {bindingLane + 1} 轨的新按键；Esc 取消。
+                </p>
+              )}
+            </div>
             <div className="sound-actions">
               <button
                 type="button"
@@ -1520,7 +1957,7 @@ export default function App() {
                 onClick={() => setCalibrationOpen(true)}
                 disabled={isSettingsLocked}
               >
-                16 拍延迟校准
+                4 预热拍 + 16 样本校准
               </button>
             </div>
           </div>
@@ -1531,8 +1968,8 @@ export default function App() {
             </button>
           </div>
           <div className="keyboard-hint">
-            {LANE_KEYS.map((key) => (
-              <kbd key={key}>{key}</kbd>
+            {settings.laneBindings.map((code, lane) => (
+              <kbd key={lane}>{bindingLabel(code)}</kbd>
             ))}
             <span>键盘 / 鼠标 / 多点触控</span>
           </div>
@@ -1560,11 +1997,10 @@ export default function App() {
         onClose={closeCalibration}
         onStart={() => void startCalibration()}
         onTap={recordCalibrationTap}
-        onPreview={() => void getEngine().playCalibrationPreview()}
+        onPreview={() => void previewCalibration()}
         onApply={(offsetMs) => {
           updateSetting("audioOffsetMs", offsetMs);
-          setCalibrationOpen(false);
-          engineRef.current?.stopAll();
+          void stopCalibration(true);
         }}
       />
     </main>

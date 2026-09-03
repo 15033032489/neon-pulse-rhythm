@@ -9,6 +9,17 @@ export const SONG_CATALOG: SongDefinition[] = [
     duration: 23.5,
     subtitle: "原创 Web Audio 合成电子曲",
     synthProfile: "chromatic",
+    accent: "cyan",
+  },
+  {
+    id: "midnight-arcade",
+    title: "Midnight Arcade",
+    artist: "Neon Pulse Lab",
+    bpm: 102,
+    duration: 52,
+    subtitle: "原创低速碎拍与夜行合成波",
+    synthProfile: "night-drive",
+    accent: "violet",
   },
 ];
 

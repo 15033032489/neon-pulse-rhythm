@@ -176,6 +176,7 @@ export function parseChart(
     chart: {
       ...definition,
       song,
+      noteCount: sortedNotes.length,
       notesByLane,
       totalScoringUnits: sortedNotes.reduce(
         (total, note) => total + scoringUnitsForNote(note),

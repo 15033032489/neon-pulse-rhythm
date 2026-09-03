@@ -6,8 +6,14 @@ import type {
   GameStats,
 } from "../game/scoring";
 import type { FinishReason } from "../game/session";
+import type { DifficultyId } from "../game/types";
 
 interface ResultPanelProps {
+  songId: string;
+  songTitle: string;
+  difficulty: DifficultyId;
+  noteCount: number;
+  maxScoreUnits: number;
   reason: FinishReason;
   grade: Grade;
   score: number;
@@ -16,6 +22,7 @@ interface ResultPanelProps {
   flags: RunFlags;
   timing: TimingSummary;
   newRecord: boolean;
+  previousBestScore: number;
   onReplay: () => void;
   onBack: () => void;
 }
@@ -23,6 +30,10 @@ interface ResultPanelProps {
 const formatScore = (score: number) => score.toString().padStart(7, "0");
 
 export function ResultPanel({
+  songTitle,
+  difficulty,
+  noteCount,
+  maxScoreUnits,
   reason,
   grade,
   score,
@@ -31,6 +42,7 @@ export function ResultPanel({
   flags,
   timing,
   newRecord,
+  previousBestScore,
   onReplay,
   onBack,
 }: ResultPanelProps) {
@@ -53,6 +65,10 @@ export function ResultPanel({
               ? "// SIGNAL LOST"
               : "// SESSION ABANDONED"}
         </span>
+        <p className="result-track-name">
+          {songTitle} · {difficulty.toUpperCase()} · {noteCount} 音符 /{" "}
+          {maxScoreUnits} 计分单位
+        </p>
         <h2>
           {reason === "complete"
             ? "RUN COMPLETE"
@@ -75,6 +91,12 @@ export function ResultPanel({
         <div className="result-highlights">
           <span>
             SCORE<b>{formatScore(score)}</b>
+            {!abandoned && (
+              <small>
+                历史差值 {score - previousBestScore >= 0 ? "+" : ""}
+                {score - previousBestScore}
+              </small>
+            )}
           </span>
           <span>
             ACCURACY<b>{accuracy.toFixed(2)}%</b>
@@ -91,6 +113,24 @@ export function ResultPanel({
               </span>
             ),
           )}
+        </div>
+        <div className="result-hold-summary">
+          <span>
+            HOLD COMPLETE <b>{stats.holdCompleted}</b>
+          </span>
+          <span>
+            HOLD BREAK <b>{stats.holdBroken}</b>
+          </span>
+          <span>
+            主判定合计{" "}
+            <b>
+              {stats.counts.perfect +
+                stats.counts.great +
+                stats.counts.good +
+                stats.counts.miss}
+              /{noteCount}
+            </b>
+          </span>
         </div>
         <div className="timing-summary">
           <span>

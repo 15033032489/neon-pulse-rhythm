@@ -37,13 +37,23 @@ export interface SongDefinition {
   bpm: number;
   duration: number;
   subtitle: string;
-  synthProfile: "chromatic";
+  synthProfile: "chromatic" | "night-drive";
+  accent: "cyan" | "violet";
 }
 
 export interface LoadedChart extends ChartDefinition {
   song: SongDefinition;
+  noteCount: number;
   totalScoringUnits: number;
   notesByLane: [ChartNote[], ChartNote[], ChartNote[], ChartNote[]];
+}
+
+export interface ChartSummary {
+  level: number;
+  noteCount: number;
+  tapCount: number;
+  holdCount: number;
+  maxScoreUnits: number;
 }
 
 export interface ChartLoadSuccess {
@@ -64,4 +74,15 @@ export const isHoldNote = (note: ChartNote): note is HoldNote =>
 
 export function scoringUnitsForNote(note: ChartNote): number {
   return isHoldNote(note) ? 2 : 1;
+}
+
+export function summarizeChart(chart: LoadedChart): ChartSummary {
+  const holdCount = chart.notes.filter(isHoldNote).length;
+  return {
+    level: chart.level,
+    noteCount: chart.noteCount,
+    tapCount: chart.noteCount - holdCount,
+    holdCount,
+    maxScoreUnits: chart.totalScoringUnits,
+  };
 }

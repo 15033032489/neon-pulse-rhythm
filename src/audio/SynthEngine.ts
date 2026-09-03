@@ -218,6 +218,24 @@ export class SynthEngine {
     const { chart, startTime } = schedule;
     const beatDuration = 60 / chart.song.bpm;
     const when = startTime + halfBeat * (beatDuration / 2);
+    if (chart.song.synthProfile === "night-drive") {
+      const beat = halfBeat / 2;
+      const chordRoots = [73.416, 65.406, 55, 61.735] as const;
+      if (halfBeat % 2 === 0) {
+        this.scheduleKick(when, beat % 4 === 0);
+        if (beat % 4 === 1 || beat % 4 === 3) this.scheduleSnare(when);
+        const root = chordRoots[Math.floor(beat / 8) % chordRoots.length];
+        this.scheduleTone(when, root, beatDuration * 0.82, 0.095, "triangle");
+        if (beat % 8 === 0)
+          this.schedulePad(when, root * 2, beatDuration * 7.2);
+      } else {
+        this.scheduleNoise(when, 0.045, 0.035, 6400);
+        const root = chordRoots[Math.floor(beat / 8) % chordRoots.length];
+        const arp = [2, 2.5, 3, 4][Math.floor(beat) % 4];
+        this.scheduleTone(when, root * arp, 0.16, 0.035, "sine", -7);
+      }
+      return;
+    }
     const bassFrequencies = [55, 65.406, 73.416, 49] as const;
     const padRoots = [110, 130.813, 146.832, 98] as const;
     this.scheduleNoise(
@@ -245,11 +263,29 @@ export class SynthEngine {
 
   private scheduleChartCue(schedule: ActiveSchedule, noteIndex: number): void {
     const note = schedule.chart.notes[noteIndex];
-    const frequencies = [329.628, 391.995, 493.883, 587.33] as const;
+    const frequencies =
+      schedule.chart.song.synthProfile === "night-drive"
+        ? ([293.665, 369.994, 440, 554.365] as const)
+        : ([329.628, 391.995, 493.883, 587.33] as const);
     const when = schedule.startTime + note.time;
     const frequency = frequencies[note.lane];
-    this.scheduleTone(when, frequency, 0.1, 0.035, "square", -4);
-    this.scheduleTone(when, frequency * 2, 0.065, 0.018, "sine", 3);
+    const nightDrive = schedule.chart.song.synthProfile === "night-drive";
+    this.scheduleTone(
+      when,
+      frequency,
+      nightDrive ? 0.18 : 0.1,
+      nightDrive ? 0.028 : 0.035,
+      nightDrive ? "triangle" : "square",
+      nightDrive ? -9 : -4,
+    );
+    this.scheduleTone(
+      when,
+      frequency * (nightDrive ? 1.5 : 2),
+      nightDrive ? 0.12 : 0.065,
+      nightDrive ? 0.014 : 0.018,
+      "sine",
+      3,
+    );
   }
 
   async start(chart: LoadedChart, countdownSeconds = 3): Promise<number> {
@@ -332,6 +368,22 @@ export class SynthEngine {
       volume * 0.42,
       "sine",
       0,
+      "hit",
+    );
+  }
+
+  playMiss(lane: Lane): void {
+    const context = this.context;
+    if (!context || context.state !== "running") return;
+    const frequencies = [116, 123, 130, 138] as const;
+    const now = context.currentTime + 0.004;
+    this.scheduleTone(
+      now,
+      frequencies[lane],
+      0.085,
+      0.026,
+      "sawtooth",
+      -18,
       "hit",
     );
   }

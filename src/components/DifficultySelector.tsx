@@ -1,4 +1,8 @@
-import { DIFFICULTIES, type DifficultyId } from "../game/types";
+import {
+  DIFFICULTIES,
+  type ChartSummary,
+  type DifficultyId,
+} from "../game/types";
 
 const meta: Record<DifficultyId, { label: string; hint: string }> = {
   easy: { label: "EASY", hint: "入门节奏" },
@@ -10,6 +14,7 @@ interface DifficultySelectorProps {
   value: DifficultyId;
   disabled?: boolean;
   levels: Record<DifficultyId, number | null>;
+  details?: Record<DifficultyId, (ChartSummary & { bestScore: number }) | null>;
   onChange: (difficulty: DifficultyId) => void;
 }
 
@@ -17,6 +22,7 @@ export function DifficultySelector({
   value,
   disabled,
   levels,
+  details,
   onChange,
 }: DifficultySelectorProps) {
   return (
@@ -38,6 +44,19 @@ export function DifficultySelector({
           <span>{meta[difficulty].label}</span>
           <b>LV.{levels[difficulty] ?? "--"}</b>
           <small>{meta[difficulty].hint}</small>
+          {details?.[difficulty] && (
+            <small className="difficulty-counts">
+              {details[difficulty]?.noteCount} 音符 ·{" "}
+              {details[difficulty]?.tapCount} Tap /{" "}
+              {details[difficulty]?.holdCount} Hold
+            </small>
+          )}
+          {details?.[difficulty] && (
+            <small className="difficulty-best">
+              BEST{" "}
+              {String(details[difficulty]?.bestScore ?? 0).padStart(7, "0")}
+            </small>
+          )}
         </button>
       ))}
     </div>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SETTINGS,
+  areBindingsUnique,
   loadSettings,
   migrateSettings,
   SETTINGS_STORAGE_KEY,
@@ -26,7 +27,7 @@ describe("设置迁移", () => {
         muted: true,
       }),
     ).toMatchObject({
-      version: 2,
+      version: 3,
       noteSpeed: 1.75,
       audioOffsetMs: -200,
       masterVolume: 1,
@@ -34,6 +35,14 @@ describe("设置迁移", () => {
       hitVolume: DEFAULT_SETTINGS.hitVolume,
       muted: true,
     });
+  });
+
+  it("检测重复键位并让损坏键位回退到 D/F/J/K", () => {
+    expect(areBindingsUnique(["KeyD", "KeyF", "KeyJ", "KeyD"])).toBe(false);
+    expect(
+      migrateSettings({ laneBindings: ["KeyD", "KeyF", "KeyJ", "KeyD"] })
+        .laneBindings,
+    ).toEqual(DEFAULT_SETTINGS.laneBindings);
   });
 
   it("损坏的 localStorage 数据不会阻止启动", () => {

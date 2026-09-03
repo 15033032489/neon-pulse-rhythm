@@ -42,7 +42,7 @@ export function CalibrationPanel({
         >
           ×
         </button>
-        <span className="overlay-index">// 16-BEAT LATENCY LAB</span>
+        <span className="overlay-index">延迟实验室 · 4 + 16</span>
         <h2 id="calibration-title">自动延迟校准</h2>
         <p>
           先跟随 4 个预热拍，再完成 16 拍采样。用
@@ -78,8 +78,8 @@ export function CalibrationPanel({
           <strong>{running ? "TAP THE PULSE" : "CALIBRATION READY"}</strong>
           <span>
             {running
-              ? `已记录 ${tappedBeats} / 20 拍`
-              : "4 WARM-UP + 16 SAMPLES"}
+              ? `有效样本 ${tappedBeats} / 16 · 前 4 拍为预热`
+              : "4 个预热拍 + 16 个有效采样"}
           </span>
         </button>
 
@@ -90,8 +90,12 @@ export function CalibrationPanel({
           >
             <strong>{result.message}</strong>
             <span>
-              采用 {result.acceptedSamples.length} 个样本 · 忽略{" "}
-              {result.ignoredCount} 个
+              有效 {result.acceptedSamples.length} · 异常/忽略{" "}
+              {result.ignoredCount} · 中位偏差{" "}
+              {result.medianDeviationMs >= 0 ? "+" : ""}
+              {result.medianDeviationMs.toFixed(1)} ms · 推荐{" "}
+              {result.recommendedOffsetMs >= 0 ? "+" : ""}
+              {result.recommendedOffsetMs} ms
             </span>
           </div>
         )}
@@ -102,7 +106,7 @@ export function CalibrationPanel({
           </button>
           <button
             type="button"
-            className="deck-primary"
+            className="deck-primary calibration-start"
             onClick={onStart}
             disabled={running}
           >

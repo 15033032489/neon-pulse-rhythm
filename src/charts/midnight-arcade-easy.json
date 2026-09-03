@@ -1,0 +1,78 @@
+{
+  "id": "midnight-arcade-easy",
+  "songId": "midnight-arcade",
+  "difficulty": "easy",
+  "level": 3,
+  "notes": [
+    { "id": "ma-e-001", "time": 2.353, "lane": 0, "type": "tap" },
+    { "id": "ma-e-002", "time": 3.529, "lane": 1, "type": "tap" },
+    { "id": "ma-e-003", "time": 4.706, "lane": 2, "type": "tap" },
+    { "id": "ma-e-004", "time": 5.882, "lane": 3, "type": "tap" },
+    {
+      "id": "ma-e-005",
+      "time": 7.059,
+      "lane": 1,
+      "type": "hold",
+      "duration": 0.882
+    },
+    { "id": "ma-e-006", "time": 8.235, "lane": 2, "type": "tap" },
+    { "id": "ma-e-007", "time": 9.412, "lane": 3, "type": "tap" },
+    { "id": "ma-e-008", "time": 10.588, "lane": 2, "type": "tap" },
+    { "id": "ma-e-009", "time": 11.765, "lane": 0, "type": "tap" },
+    { "id": "ma-e-010", "time": 12.941, "lane": 1, "type": "tap" },
+    { "id": "ma-e-011", "time": 14.118, "lane": 2, "type": "tap" },
+    {
+      "id": "ma-e-012",
+      "time": 15.294,
+      "lane": 3,
+      "type": "hold",
+      "duration": 0.882
+    },
+    { "id": "ma-e-013", "time": 16.471, "lane": 2, "type": "tap" },
+    { "id": "ma-e-014", "time": 17.647, "lane": 1, "type": "tap" },
+    { "id": "ma-e-015", "time": 18.824, "lane": 0, "type": "tap" },
+    { "id": "ma-e-016", "time": 20.0, "lane": 1, "type": "tap" },
+    { "id": "ma-e-017", "time": 21.176, "lane": 3, "type": "tap" },
+    { "id": "ma-e-018", "time": 22.353, "lane": 2, "type": "tap" },
+    {
+      "id": "ma-e-019",
+      "time": 23.529,
+      "lane": 1,
+      "type": "hold",
+      "duration": 1.176
+    },
+    { "id": "ma-e-020", "time": 24.706, "lane": 3, "type": "tap" },
+    { "id": "ma-e-021", "time": 25.882, "lane": 0, "type": "tap" },
+    { "id": "ma-e-022", "time": 27.059, "lane": 2, "type": "tap" },
+    { "id": "ma-e-023", "time": 28.235, "lane": 3, "type": "tap" },
+    { "id": "ma-e-024", "time": 29.412, "lane": 1, "type": "tap" },
+    { "id": "ma-e-025", "time": 30.588, "lane": 0, "type": "tap" },
+    { "id": "ma-e-026", "time": 31.765, "lane": 2, "type": "tap" },
+    {
+      "id": "ma-e-027",
+      "time": 32.941,
+      "lane": 3,
+      "type": "hold",
+      "duration": 0.882
+    },
+    { "id": "ma-e-028", "time": 34.118, "lane": 1, "type": "tap" },
+    { "id": "ma-e-029", "time": 35.294, "lane": 0, "type": "tap" },
+    { "id": "ma-e-030", "time": 36.471, "lane": 1, "type": "tap" },
+    { "id": "ma-e-031", "time": 37.647, "lane": 2, "type": "tap" },
+    { "id": "ma-e-032", "time": 38.824, "lane": 3, "type": "tap" },
+    { "id": "ma-e-033", "time": 40.0, "lane": 2, "type": "tap" },
+    { "id": "ma-e-034", "time": 41.176, "lane": 0, "type": "tap" },
+    {
+      "id": "ma-e-035",
+      "time": 42.353,
+      "lane": 1,
+      "type": "hold",
+      "duration": 1.176
+    },
+    { "id": "ma-e-036", "time": 43.529, "lane": 3, "type": "tap" },
+    { "id": "ma-e-037", "time": 44.706, "lane": 2, "type": "tap" },
+    { "id": "ma-e-038", "time": 45.882, "lane": 1, "type": "tap" },
+    { "id": "ma-e-039", "time": 47.059, "lane": 0, "type": "tap" },
+    { "id": "ma-e-040", "time": 48.235, "lane": 3, "type": "tap" }
+  ]
+}

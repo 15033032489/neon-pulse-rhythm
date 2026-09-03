@@ -10,6 +10,7 @@ export interface CalibrationResult {
   recommendedOffsetMs: number;
   acceptedSamples: number[];
   ignoredCount: number;
+  medianDeviationMs: number;
   message: string;
 }
 
@@ -36,6 +37,7 @@ export function analyzeCalibration(
       recommendedOffsetMs: 0,
       acceptedSamples: candidates,
       ignoredCount: samples.length - candidates.length,
+      medianDeviationMs: median(candidates),
       message: `有效点击不足（${candidates.length}/8），请重新校准。`,
     };
   }
@@ -61,6 +63,7 @@ export function analyzeCalibration(
     recommendedOffsetMs,
     acceptedSamples: accepted,
     ignoredCount: samples.length - accepted.length,
+    medianDeviationMs: robustCenter,
     message:
       accepted.length >= 8
         ? `建议偏移 ${recommendedOffsetMs >= 0 ? "+" : ""}${recommendedOffsetMs} ms。`

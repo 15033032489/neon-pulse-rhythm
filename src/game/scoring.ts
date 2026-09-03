@@ -13,7 +13,8 @@ export interface GameStats {
   rawScore: number;
   combo: number;
   maxCombo: number;
-  judgedUnits: number;
+  judgedNotes: number;
+  processedScoreUnits: number;
   accuracyUnits: number;
   life: number;
   counts: JudgementCounts;
@@ -75,6 +76,15 @@ export const RULESET = {
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
 
+export function judgementCount(stats: GameStats): number {
+  return (
+    stats.counts.perfect +
+    stats.counts.great +
+    stats.counts.good +
+    stats.counts.miss
+  );
+}
+
 export function classifyHitOffset(offsetMs: number): HitJudgement | null {
   if (!Number.isFinite(offsetMs)) return null;
   const absoluteOffset = Math.abs(offsetMs);
@@ -93,7 +103,8 @@ export function createInitialStats(initialLife = RULESET.maxLife): GameStats {
     rawScore: 0,
     combo: 0,
     maxCombo: 0,
-    judgedUnits: 0,
+    judgedNotes: 0,
+    processedScoreUnits: 0,
     accuracyUnits: 0,
     life: clamp(initialLife, 0, RULESET.maxLife),
     counts: { perfect: 0, great: 0, good: 0, miss: 0 },
@@ -103,6 +114,7 @@ export function createInitialStats(initialLife = RULESET.maxLife): GameStats {
   };
 }
 
+/** Applies the one and only main judgement for a Tap or Hold object. */
 export function applyJudgement(
   stats: GameStats,
   judgement: Judgement,
@@ -117,7 +129,8 @@ export function applyJudgement(
     rawScore: stats.rawScore + RULESET.score[judgement],
     combo,
     maxCombo: Math.max(stats.maxCombo, combo),
-    judgedUnits: stats.judgedUnits + 1,
+    judgedNotes: stats.judgedNotes + 1,
+    processedScoreUnits: stats.processedScoreUnits + 1,
     accuracyUnits: stats.accuracyUnits + RULESET.accuracyUnits[judgement],
     life: clamp(stats.life + RULESET.lifeDelta[judgement], 0, RULESET.maxLife),
     counts: {
@@ -130,14 +143,12 @@ export function applyJudgement(
   };
 }
 
+/** A Hold tail is scored independently but never creates another main judgement. */
 export function applyHoldCompletion(stats: GameStats): GameStats {
-  const combo = stats.combo + 1;
   return {
     ...stats,
     rawScore: stats.rawScore + RULESET.score.holdComplete,
-    combo,
-    maxCombo: Math.max(stats.maxCombo, combo),
-    judgedUnits: stats.judgedUnits + 1,
+    processedScoreUnits: stats.processedScoreUnits + 1,
     accuracyUnits: stats.accuracyUnits + RULESET.accuracyUnits.holdComplete,
     life: clamp(
       stats.life + RULESET.lifeDelta.holdComplete,
@@ -148,42 +159,69 @@ export function applyHoldCompletion(stats: GameStats): GameStats {
   };
 }
 
+/** Breaking a started Hold loses its tail unit and combo without adding Miss. */
 export function applyHoldBreak(stats: GameStats): GameStats {
   return {
     ...stats,
     combo: 0,
-    judgedUnits: stats.judgedUnits + 1,
+    processedScoreUnits: stats.processedScoreUnits + 1,
     life: clamp(stats.life + RULESET.lifeDelta.holdBreak, 0, RULESET.maxLife),
-    counts: { ...stats.counts, miss: stats.counts.miss + 1 },
     holdBroken: stats.holdBroken + 1,
   };
 }
 
-export function applyMissUnits(stats: GameStats, count: number): GameStats {
-  let next = stats;
-  for (let index = 0; index < Math.max(0, Math.floor(count)); index += 1) {
-    next = applyJudgement(next, "miss");
-  }
-  return next;
+/** Misses an unstarted note once while accounting for all of its score units. */
+export function applyMissedNote(stats: GameStats, scoreUnits = 1): GameStats {
+  const next = applyJudgement(stats, "miss");
+  return {
+    ...next,
+    processedScoreUnits:
+      next.processedScoreUnits + Math.max(0, Math.floor(scoreUnits) - 1),
+  };
+}
+
+export function applyRemainingMisses(
+  stats: GameStats,
+  noteCount: number,
+  scoreUnits: number,
+): GameStats {
+  const safeNotes = Math.max(0, Math.floor(noteCount));
+  const safeUnits = Math.max(safeNotes, Math.floor(scoreUnits));
+  if (!safeNotes && !safeUnits) return stats;
+  return {
+    ...stats,
+    combo: 0,
+    judgedNotes: stats.judgedNotes + safeNotes,
+    processedScoreUnits: stats.processedScoreUnits + safeUnits,
+    life: clamp(
+      stats.life + RULESET.lifeDelta.miss * safeNotes,
+      0,
+      RULESET.maxLife,
+    ),
+    counts: { ...stats.counts, miss: stats.counts.miss + safeNotes },
+  };
 }
 
 export function calculateNormalizedScore(
   stats: GameStats,
-  totalScoringUnits: number,
+  maxScoreUnits: number,
 ): number {
-  if (totalScoringUnits <= 0) return 0;
+  if (maxScoreUnits <= 0) return 0;
   return clamp(
     Math.round(
-      (stats.rawScore / (totalScoringUnits * 1000)) * RULESET.normalizedMaximum,
+      (stats.rawScore / (maxScoreUnits * 1000)) * RULESET.normalizedMaximum,
     ),
     0,
     RULESET.normalizedMaximum,
   );
 }
 
-export function calculateAccuracy(stats: GameStats): number {
-  if (stats.judgedUnits === 0) return 100;
-  return (stats.accuracyUnits / (stats.judgedUnits * 1000)) * 100;
+export function calculateAccuracy(
+  stats: GameStats,
+  maxScoreUnits = stats.processedScoreUnits,
+): number {
+  if (maxScoreUnits === 0) return 100;
+  return (stats.accuracyUnits / (maxScoreUnits * 1000)) * 100;
 }
 
 export function calculateGrade(accuracy: number): Grade {
@@ -196,15 +234,17 @@ export function calculateGrade(accuracy: number): Grade {
 
 export function calculateRunFlags(
   stats: GameStats,
-  totalScoringUnits: number,
+  noteCount: number,
+  maxScoreUnits: number,
 ): RunFlags {
-  const completed = stats.judgedUnits >= totalScoringUnits;
+  const completed =
+    stats.judgedNotes >= noteCount &&
+    stats.processedScoreUnits >= maxScoreUnits;
   const fc = completed && stats.counts.miss === 0 && stats.holdBroken === 0;
   const ap =
     fc &&
-    stats.counts.great === 0 &&
-    stats.counts.good === 0 &&
-    stats.counts.perfect + stats.holdCompleted === totalScoringUnits;
+    stats.counts.perfect === noteCount &&
+    stats.rawScore === maxScoreUnits * RULESET.score.perfect;
   return { fc, ap };
 }
 

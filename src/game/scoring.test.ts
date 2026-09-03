@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { loadBuiltInChart } from "../charts";
+import { SONG_CATALOG } from "../songs/catalog";
 import {
   applyHoldBreak,
   applyHoldCompletion,
@@ -9,6 +11,7 @@ import {
   calculateRunFlags,
   classifyHitOffset,
   createInitialStats,
+  judgementCount,
   isNoteOverdue,
   summarizeTiming,
   type Judgement,
@@ -76,12 +79,57 @@ describe("计分、连击和准确率", () => {
     expect(calculateAccuracy(stats)).toBeCloseTo(91.666666, 4);
   });
 
+  it("Hold 尾部完成或中断不重复增加主判定", () => {
+    const headed = applyJudgement(createInitialStats(), "perfect");
+    const completed = applyHoldCompletion(headed);
+    const broken = applyHoldBreak(headed);
+    expect(judgementCount(completed)).toBe(1);
+    expect(completed).toMatchObject({ holdCompleted: 1, combo: 1 });
+    expect(judgementCount(broken)).toBe(1);
+    expect(broken).toMatchObject({ holdBroken: 1, combo: 0 });
+  });
+
+  it("全 Perfect Tap + Hold 满分严格为 1,000,000", () => {
+    let stats = createInitialStats();
+    stats = applyJudgement(stats, "perfect");
+    stats = applyJudgement(stats, "perfect");
+    stats = applyHoldCompletion(stats);
+    expect(calculateNormalizedScore(stats, 3)).toBe(1_000_000);
+    expect(calculateAccuracy(stats, 3)).toBe(100);
+    expect(calculateRunFlags(stats, 2, 3)).toEqual({ fc: true, ap: true });
+  });
+
+  it("全部内置谱面的主判定数等于音符数且 AP 满分严格一致", () => {
+    for (const song of SONG_CATALOG) {
+      for (const difficulty of ["easy", "normal", "hard"] as const) {
+        const loaded = loadBuiltInChart(song.id, difficulty);
+        if (!loaded.ok) throw new Error(loaded.errors.join("\n"));
+        let stats = createInitialStats();
+        for (const note of loaded.chart.notes) {
+          stats = applyJudgement(stats, "perfect", 0);
+          if (note.type === "hold") stats = applyHoldCompletion(stats);
+        }
+        expect(judgementCount(stats)).toBe(loaded.chart.noteCount);
+        expect(
+          calculateNormalizedScore(stats, loaded.chart.totalScoringUnits),
+        ).toBe(1_000_000);
+        expect(
+          calculateRunFlags(
+            stats,
+            loaded.chart.noteCount,
+            loaded.chart.totalScoringUnits,
+          ),
+        ).toEqual({ fc: true, ap: true });
+      }
+    }
+  });
+
   it("识别 FC 和 AP", () => {
     let stats = createInitialStats();
     stats = applyJudgement(stats, "perfect");
     stats = applyHoldCompletion(stats);
-    expect(calculateRunFlags(stats, 2)).toEqual({ fc: true, ap: true });
-    expect(calculateRunFlags(applyJudgement(stats, "miss"), 3)).toEqual({
+    expect(calculateRunFlags(stats, 1, 2)).toEqual({ fc: true, ap: true });
+    expect(calculateRunFlags(applyJudgement(stats, "miss"), 2, 3)).toEqual({
       fc: false,
       ap: false,
     });

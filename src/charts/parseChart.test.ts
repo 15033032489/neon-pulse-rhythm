@@ -5,18 +5,27 @@ import { parseChart } from "./parseChart";
 
 describe("谱面解析和校验", () => {
   it.each([
-    ["easy", 44],
-    ["normal", 96],
-    ["hard", 148],
-  ] as const)("加载、排序并索引 %s 谱面", (difficulty, noteCount) => {
-    const result = loadBuiltInChart(DEMO_SONG.id, difficulty);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.chart.notes).toHaveLength(noteCount);
-    expect(result.chart.notes.some((note) => note.type === "hold")).toBe(true);
-    expect(result.chart.totalScoringUnits).toBeGreaterThan(noteCount);
-    expect(result.chart.notesByLane.flat()).toHaveLength(noteCount);
-  });
+    ["chromatic-run", "easy", 44],
+    ["chromatic-run", "normal", 96],
+    ["chromatic-run", "hard", 148],
+    ["midnight-arcade", "easy", 40],
+    ["midnight-arcade", "normal", 80],
+    ["midnight-arcade", "hard", 108],
+  ] as const)(
+    "加载、排序并索引 %s %s 谱面",
+    (songId, difficulty, noteCount) => {
+      const result = loadBuiltInChart(songId, difficulty);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.chart.notes).toHaveLength(noteCount);
+      expect(result.chart.noteCount).toBe(noteCount);
+      expect(result.chart.notes.some((note) => note.type === "hold")).toBe(
+        true,
+      );
+      expect(result.chart.totalScoringUnits).toBeGreaterThan(noteCount);
+      expect(result.chart.notesByLane.flat()).toHaveLength(noteCount);
+    },
+  );
 
   it("自动排序并给出提示", () => {
     const result = parseChart(
