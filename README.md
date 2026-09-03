@@ -82,4 +82,3 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 3. 如需不同编曲，在 `SynthEngine` 中按 `synthProfile` 添加新的原创合成调度器，继续使用同一绝对 `AudioContext` 时间与短窗口游标。
 
 内置 `Chromatic Run` 及全部谱面为本项目的程序化原创内容，无需密钥或外部版权资源。
-

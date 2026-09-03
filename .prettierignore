@@ -1,0 +1,5 @@
+dist
+node_modules
+outputs
+work
+package-lock.json

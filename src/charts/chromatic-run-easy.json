@@ -1,0 +1,277 @@
+{
+  "id": "chromatic-run-easy",
+  "songId": "chromatic-run",
+  "difficulty": "easy",
+  "level": 3,
+  "notes": [
+    {
+      "id": "e001",
+      "time": 1.875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e002",
+      "time": 2.34375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e003",
+      "time": 2.8125,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e004",
+      "time": 3.28125,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e005",
+      "time": 3.75,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e006",
+      "time": 4.21875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e007",
+      "time": 4.6875,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e008",
+      "time": 5.15625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e009",
+      "time": 5.625,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.703125
+    },
+    {
+      "id": "e010",
+      "time": 6.09375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e011",
+      "time": 6.5625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e012",
+      "time": 7.03125,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e013",
+      "time": 7.5,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e014",
+      "time": 7.96875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e015",
+      "time": 8.4375,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e016",
+      "time": 8.90625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e017",
+      "time": 9.375,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.703125
+    },
+    {
+      "id": "e018",
+      "time": 9.84375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e019",
+      "time": 10.3125,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e020",
+      "time": 10.78125,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e021",
+      "time": 11.25,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e022",
+      "time": 11.71875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e023",
+      "time": 12.1875,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e024",
+      "time": 12.65625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e025",
+      "time": 13.125,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.703125
+    },
+    {
+      "id": "e026",
+      "time": 13.59375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e027",
+      "time": 14.0625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e028",
+      "time": 14.53125,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e029",
+      "time": 15,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e030",
+      "time": 15.46875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e031",
+      "time": 15.9375,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e032",
+      "time": 16.40625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e033",
+      "time": 16.875,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.703125
+    },
+    {
+      "id": "e034",
+      "time": 17.34375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e035",
+      "time": 17.8125,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e036",
+      "time": 18.28125,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e037",
+      "time": 18.75,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e038",
+      "time": 19.21875,
+      "lane": 0,
+      "type": "tap"
+    },
+    {
+      "id": "e039",
+      "time": 19.6875,
+      "lane": 3,
+      "type": "tap"
+    },
+    {
+      "id": "e040",
+      "time": 20.15625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e041",
+      "time": 20.625,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.703125
+    },
+    {
+      "id": "e042",
+      "time": 21.09375,
+      "lane": 1,
+      "type": "tap"
+    },
+    {
+      "id": "e043",
+      "time": 21.5625,
+      "lane": 2,
+      "type": "tap"
+    },
+    {
+      "id": "e044",
+      "time": 22.03125,
+      "lane": 3,
+      "type": "tap"
+    }
+  ]
+}
