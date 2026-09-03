@@ -14,6 +14,7 @@ import { CalibrationPanel } from "./components/CalibrationPanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DifficultySelector } from "./components/DifficultySelector";
 import { ResultPanel } from "./components/ResultPanel";
+import { TutorialPanel } from "./components/TutorialPanel";
 import { SONG_CATALOG, loadBuiltInChart } from "./charts";
 import {
   analyzeCalibration,
@@ -21,6 +22,11 @@ import {
   type CalibrationSample,
 } from "./game/calibration";
 import { ChartRuntime, type RuntimeEvent } from "./game/chartRuntime";
+import { AudioActivityController } from "./game/audioActivity";
+import {
+  deriveProductDisplayState,
+  formatClockTime,
+} from "./game/displayState";
 import {
   loadRecords,
   mergeRecord,
@@ -64,6 +70,11 @@ import {
   SETTINGS_LIMITS,
   type GameSettings,
 } from "./game/settings";
+import {
+  loadTutorialCompleted,
+  saveTutorialCompleted,
+  tutorialStepAfterNext,
+} from "./game/tutorial";
 import {
   summarizeChart,
   type ChartNote,
@@ -119,6 +130,7 @@ type NoteStyle = CSSProperties & {
   "--hold-length"?: string;
 };
 type LaneStyle = CSSProperties & { "--lane-index": number };
+type ControlTab = "gameplay" | "sound" | "keys";
 
 const BASE_APPROACH_SECONDS = 2.15;
 const ACTIVE_PHASES: GamePhase[] = ["countdown", "playing"];
@@ -142,6 +154,11 @@ const PHASE_LABELS: Record<GamePhase, string> = {
 };
 
 const DIFFICULTIES: DifficultyId[] = ["easy", "normal", "hard"];
+const CONTROL_TABS: Array<{ id: ControlTab; label: string }> = [
+  { id: "gameplay", label: "玩法" },
+  { id: "sound", label: "声音" },
+  { id: "keys", label: "键位" },
+];
 const BUILT_IN_CHART_RESULTS = Object.fromEntries(
   SONG_CATALOG.map((song) => [
     song.id,
@@ -163,10 +180,6 @@ const emptyPressedLanes = (): [boolean, boolean, boolean, boolean] => [
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
 const formatScore = (score: number) => score.toString().padStart(7, "0");
-const formatTime = (seconds: number) => {
-  const safe = Math.max(0, Math.floor(seconds));
-  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
-};
 const blocksGameplayInput = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(
@@ -211,6 +224,7 @@ export default function App() {
         candidate.ok
           ? {
               ...summarizeChart(candidate.chart),
+              description: candidate.chart.description,
               bestScore:
                 records.entries[recordKey(menuSongId, value)]?.bestScore ?? 0,
             }
@@ -219,7 +233,11 @@ export default function App() {
     }),
   ) as Record<
     DifficultyId,
-    (ReturnType<typeof summarizeChart> & { bestScore: number }) | null
+    | (ReturnType<typeof summarizeChart> & {
+        bestScore: number;
+        description: string;
+      })
+    | null
   >;
   const [pressedLanes, setPressedLanes] = useState(emptyPressedLanes);
   const [effects, setEffects] = useState<HitEffect[]>([]);
@@ -237,6 +255,20 @@ export default function App() {
   );
   const [bindingLane, setBindingLane] = useState<Lane | null>(null);
   const [comboMilestone, setComboMilestone] = useState<number | null>(null);
+  const [comboBreak, setComboBreak] = useState(false);
+  const [activeControlTab, setActiveControlTab] =
+    useState<ControlTab>("gameplay");
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+  const [compactControls, setCompactControls] = useState(
+    () => window.matchMedia("(max-width: 920px)").matches,
+  );
+  const [previewSongId, setPreviewSongId] = useState<string | null>(null);
+  const [tutorialOpen, setTutorialOpen] = useState(
+    () => !loadTutorialCompleted(),
+  );
+  const [tutorialStep, setTutorialStep] = useState(0);
+  const [tutorialActionComplete, setTutorialActionComplete] = useState(false);
+  const [tutorialBeatPlaying, setTutorialBeatPlaying] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -252,6 +284,12 @@ export default function App() {
   const calibrationSamplesRef = useRef<CalibrationSample[]>([]);
   const calibrationSeenBeatsRef = useRef(new Set<number>());
   const calibrationPreviewTimerRef = useRef<number | null>(null);
+  const previewTimerRef = useRef<number | null>(null);
+  const previewFrameRef = useRef<number | null>(null);
+  const previewRequestRef = useRef(0);
+  const tutorialTimerRef = useRef<number | null>(null);
+  const tutorialHoldStartedRef = useRef<number | null>(null);
+  const auxiliaryAudioRef = useRef(new AudioActivityController());
 
   const engineRef = useRef<SynthEngine | null>(null);
   const runtimeRef = useRef<ChartRuntime | null>(null);
@@ -265,6 +303,9 @@ export default function App() {
   const focusLostDuringTransitionRef = useRef(false);
   const bindingMapRef = useRef(bindingMap(settings.laneBindings));
   const milestoneTimerRef = useRef<number | null>(null);
+  const comboBreakTimerRef = useRef<number | null>(null);
+  const controlTabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const settingsTriggerRef = useRef<HTMLButtonElement | null>(null);
   const laneFieldRef = useRef<HTMLDivElement | null>(null);
   const judgeLineRef = useRef<HTMLDivElement | null>(null);
 
@@ -320,11 +361,15 @@ export default function App() {
       setAutoPaused(false);
       setAbandonOpen(false);
       setComboMilestone(null);
+      setComboBreak(false);
       setUiMessage(null);
       clearPressedInputs();
       if (milestoneTimerRef.current)
         window.clearTimeout(milestoneTimerRef.current);
       milestoneTimerRef.current = null;
+      if (comboBreakTimerRef.current)
+        window.clearTimeout(comboBreakTimerRef.current);
+      comboBreakTimerRef.current = null;
       engineRef.current?.stopAll();
       void engineRef.current
         ?.suspend()
@@ -508,6 +553,15 @@ export default function App() {
           900,
         );
       }
+      if (previousCombo > 0 && next.combo === 0) {
+        setComboBreak(true);
+        if (comboBreakTimerRef.current)
+          window.clearTimeout(comboBreakTimerRef.current);
+        comboBreakTimerRef.current = window.setTimeout(
+          () => setComboBreak(false),
+          720,
+        );
+      }
       if (next.life <= 0) finishGame("failed");
     },
     [addEffect, finishGame, reducedMotion],
@@ -539,6 +593,10 @@ export default function App() {
 
   const startGame = useCallback(
     async (requestedChart?: LoadedChart) => {
+      auxiliaryAudioRef.current.stop();
+      setPreviewSongId(null);
+      setTutorialOpen(false);
+      setSettingsDrawerOpen(false);
       const currentChart = requestedChart ?? chart;
       if (!currentChart) {
         setAudioError(
@@ -710,6 +768,9 @@ export default function App() {
 
   const startCalibration = useCallback(async () => {
     try {
+      auxiliaryAudioRef.current.stop();
+      setPreviewSongId(null);
+      setTutorialOpen(false);
       const engine = getEngine();
       engine.setVolumes(settingsRef.current);
       calibrationSamplesRef.current = [];
@@ -720,6 +781,7 @@ export default function App() {
       setCalibrationTapCount(0);
       setCalibrationResult(null);
       calibrationClockRef.current = await engine.startCalibration();
+      auxiliaryAudioRef.current.start("calibration", () => engine.stopAll());
       calibrationRunningRef.current = true;
       setCalibrationRunning(true);
     } catch (error) {
@@ -735,6 +797,7 @@ export default function App() {
   }, [getEngine]);
 
   const stopCalibration = useCallback(async (closePanel: boolean) => {
+    auxiliaryAudioRef.current.stop("calibration");
     calibrationRunningRef.current = false;
     setCalibrationRunning(false);
     calibrationClockRef.current = null;
@@ -765,13 +828,17 @@ export default function App() {
 
   const previewCalibration = useCallback(async () => {
     try {
+      auxiliaryAudioRef.current.stop();
+      setPreviewSongId(null);
+      setTutorialOpen(false);
       const engine = getEngine();
       engine.setVolumes(settingsRef.current);
       await engine.playCalibrationPreview();
+      auxiliaryAudioRef.current.start("calibration", () => engine.stopAll());
       if (calibrationPreviewTimerRef.current)
         window.clearTimeout(calibrationPreviewTimerRef.current);
       calibrationPreviewTimerRef.current = window.setTimeout(() => {
-        engine.stopAll();
+        auxiliaryAudioRef.current.stop("calibration");
         void engine
           .suspend()
           .finally(() => setAudioStateRevision((revision) => revision + 1));
@@ -790,6 +857,180 @@ export default function App() {
     }
   }, [getEngine]);
 
+  const stopSongPreview = useCallback(() => {
+    previewRequestRef.current += 1;
+    if (!auxiliaryAudioRef.current.stop("preview")) {
+      if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current);
+      if (previewFrameRef.current)
+        cancelAnimationFrame(previewFrameRef.current);
+      previewTimerRef.current = null;
+      previewFrameRef.current = null;
+      setPreviewSongId(null);
+    }
+  }, []);
+
+  const toggleSongPreview = useCallback(
+    async (songId: string) => {
+      if (previewSongId === songId) {
+        stopSongPreview();
+        return;
+      }
+      if (
+        !["idle", "results"].includes(phaseRef.current) ||
+        calibrationRunningRef.current
+      )
+        return;
+      if (calibrationOpen) await stopCalibration(true);
+      setTutorialOpen(false);
+      const candidate = BUILT_IN_CHART_RESULTS[songId]?.normal;
+      if (!candidate?.ok) {
+        setAudioError("该歌曲缺少可试听的 Normal 谱面。");
+        return;
+      }
+      const requestId = previewRequestRef.current + 1;
+      previewRequestRef.current = requestId;
+      const engine = getEngine();
+      engine.setVolumes(settingsRef.current);
+      auxiliaryAudioRef.current.start("preview", () => {
+        if (previewTimerRef.current)
+          window.clearTimeout(previewTimerRef.current);
+        if (previewFrameRef.current)
+          cancelAnimationFrame(previewFrameRef.current);
+        previewTimerRef.current = null;
+        previewFrameRef.current = null;
+        engine.stopAll();
+        void engine
+          .suspend()
+          .finally(() => setAudioStateRevision((revision) => revision + 1));
+        setPreviewSongId(null);
+      });
+      setPreviewSongId(songId);
+      setAudioError(null);
+      try {
+        const endTime = await engine.startPreview(candidate.chart, 10);
+        if (
+          requestId !== previewRequestRef.current ||
+          auxiliaryAudioRef.current.current() !== "preview"
+        )
+          return;
+        const pump = () => {
+          if (auxiliaryAudioRef.current.current() !== "preview") return;
+          engine.pumpScheduler();
+          previewFrameRef.current = requestAnimationFrame(pump);
+        };
+        previewFrameRef.current = requestAnimationFrame(pump);
+        const remainingMs = Math.max(
+          0,
+          (endTime - engine.getCurrentTime()) * 1000,
+        );
+        previewTimerRef.current = window.setTimeout(
+          () => auxiliaryAudioRef.current.stop("preview"),
+          remainingMs + 80,
+        );
+      } catch (error) {
+        auxiliaryAudioRef.current.stop("preview");
+        setAudioError(
+          error instanceof Error ? error.message : "无法启动歌曲试听。",
+        );
+      }
+    },
+    [
+      calibrationOpen,
+      getEngine,
+      previewSongId,
+      stopCalibration,
+      stopSongPreview,
+    ],
+  );
+
+  const closeTutorial = useCallback((markComplete = false) => {
+    auxiliaryAudioRef.current.stop("tutorial");
+    if (tutorialTimerRef.current) window.clearTimeout(tutorialTimerRef.current);
+    tutorialTimerRef.current = null;
+    tutorialHoldStartedRef.current = null;
+    setTutorialBeatPlaying(false);
+    setTutorialOpen(false);
+    setTutorialStep(0);
+    setTutorialActionComplete(false);
+    if (markComplete) saveTutorialCompleted();
+  }, []);
+
+  const openTutorial = useCallback(async () => {
+    stopSongPreview();
+    if (calibrationOpen) await stopCalibration(true);
+    setSettingsDrawerOpen(false);
+    setTutorialStep(0);
+    setTutorialActionComplete(false);
+    setTutorialOpen(true);
+  }, [calibrationOpen, stopCalibration, stopSongPreview]);
+
+  const playTutorialBeat = useCallback(async () => {
+    if (!tutorialOpen || !["idle", "results"].includes(phaseRef.current))
+      return;
+    stopSongPreview();
+    const engine = getEngine();
+    engine.setVolumes(settingsRef.current);
+    auxiliaryAudioRef.current.start("tutorial", () => {
+      if (tutorialTimerRef.current)
+        window.clearTimeout(tutorialTimerRef.current);
+      tutorialTimerRef.current = null;
+      engine.stopAll();
+      void engine
+        .suspend()
+        .finally(() => setAudioStateRevision((revision) => revision + 1));
+      setTutorialBeatPlaying(false);
+    });
+    setTutorialBeatPlaying(true);
+    try {
+      const endTime = await engine.playTutorialPulse(tutorialStep);
+      tutorialTimerRef.current = window.setTimeout(
+        () => auxiliaryAudioRef.current.stop("tutorial"),
+        Math.max(0, (endTime - engine.getCurrentTime()) * 1000) + 60,
+      );
+    } catch (error) {
+      auxiliaryAudioRef.current.stop("tutorial");
+      setAudioError(
+        error instanceof Error ? error.message : "无法播放教学节拍。",
+      );
+    }
+  }, [getEngine, stopSongPreview, tutorialOpen, tutorialStep]);
+
+  const tutorialLanePress = useCallback(
+    (_lane: Lane) => {
+      if (!tutorialOpen) return;
+      if (tutorialStep === 2) {
+        tutorialHoldStartedRef.current = performance.now();
+        setTutorialActionComplete(false);
+      } else {
+        setTutorialActionComplete(true);
+      }
+    },
+    [tutorialOpen, tutorialStep],
+  );
+
+  const tutorialLaneRelease = useCallback(
+    (_lane?: Lane) => {
+      if (!tutorialOpen || tutorialStep !== 2) return;
+      const started = tutorialHoldStartedRef.current;
+      if (started === null) return;
+      tutorialHoldStartedRef.current = null;
+      if (performance.now() - started >= 500) setTutorialActionComplete(true);
+      else setUiMessage("Hold 需要持续按住至少半秒再松开。");
+    },
+    [tutorialOpen, tutorialStep],
+  );
+
+  const advanceTutorial = useCallback(() => {
+    const next = tutorialStepAfterNext(tutorialStep);
+    auxiliaryAudioRef.current.stop("tutorial");
+    if (next === null) {
+      closeTutorial(true);
+      return;
+    }
+    setTutorialStep(next);
+    setTutorialActionComplete(next === 3);
+  }, [closeTutorial, tutorialStep]);
+
   useEffect(() => {
     settingsRef.current = settings;
     bindingMapRef.current = bindingMap(settings.laneBindings);
@@ -803,6 +1044,27 @@ export default function App() {
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 920px)");
+    const update = () => {
+      setCompactControls(media.matches);
+      if (!media.matches) setSettingsDrawerOpen(false);
+    };
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!compactControls || !settingsDrawerOpen) return;
+    requestAnimationFrame(() => {
+      const index = CONTROL_TABS.findIndex(
+        (tab) => tab.id === activeControlTab,
+      );
+      controlTabRefs.current[index]?.focus();
+    });
+  }, [activeControlTab, compactControls, settingsDrawerOpen]);
 
   useEffect(() => {
     recordsRef.current = records;
@@ -823,6 +1085,15 @@ export default function App() {
     document.body.classList.toggle("game-focus", focused);
     return () => document.body.classList.remove("game-focus");
   }, [phase]);
+
+  useEffect(() => {
+    const locked =
+      tutorialOpen ||
+      calibrationOpen ||
+      (compactControls && settingsDrawerOpen);
+    document.body.classList.toggle("dialog-lock", locked);
+    return () => document.body.classList.remove("dialog-lock");
+  }, [calibrationOpen, compactControls, settingsDrawerOpen, tutorialOpen]);
 
   useEffect(() => {
     const onFullscreenChange = () =>
@@ -912,7 +1183,7 @@ export default function App() {
         calibrationRunningRef.current = false;
         setCalibrationRunning(false);
         calibrationClockRef.current = null;
-        engine.stopAll();
+        auxiliaryAudioRef.current.stop("calibration");
         void engine
           .suspend()
           .finally(() => setAudioStateRevision((revision) => revision + 1));
@@ -928,6 +1199,9 @@ export default function App() {
   useEffect(() => {
     const pauseForFocusLoss = () => {
       focusLostDuringTransitionRef.current = true;
+      stopSongPreview();
+      if (tutorialOpen) closeTutorial(false);
+      if (calibrationOpen) closeCalibration();
       void pauseGame(true);
     };
     const onVisibility = () => {
@@ -941,7 +1215,14 @@ export default function App() {
       window.removeEventListener("blur", pauseForFocusLoss);
       window.removeEventListener("pagehide", pauseForFocusLoss);
     };
-  }, [pauseGame]);
+  }, [
+    calibrationOpen,
+    closeCalibration,
+    closeTutorial,
+    pauseGame,
+    stopSongPreview,
+    tutorialOpen,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -974,6 +1255,21 @@ export default function App() {
         setBindingLane(null);
         return;
       }
+      if (tutorialOpen) {
+        if (event.repeat) return;
+        if (event.code === "Escape") {
+          event.preventDefault();
+          closeTutorial(false);
+          return;
+        }
+        const tutorialLane = bindingMapRef.current[event.code];
+        if (tutorialLane !== undefined) {
+          event.preventDefault();
+          pressedCodesRef.current.add(event.code);
+          tutorialLanePress(tutorialLane);
+        }
+        return;
+      }
       if (calibrationOpen) {
         if (
           !event.repeat &&
@@ -984,6 +1280,12 @@ export default function App() {
           recordCalibrationTap();
         }
         if (event.code === "Escape" && !event.repeat) closeCalibration();
+        return;
+      }
+      if (event.code === "Escape" && !event.repeat && settingsDrawerOpen) {
+        event.preventDefault();
+        setSettingsDrawerOpen(false);
+        requestAnimationFrame(() => settingsTriggerRef.current?.focus());
         return;
       }
       if (blocksGameplayInput(event.target)) return;
@@ -1006,6 +1308,10 @@ export default function App() {
       const lane = bindingMapRef.current[event.code];
       if (lane === undefined) return;
       pressedCodesRef.current.delete(event.code);
+      if (tutorialOpen) {
+        tutorialLaneRelease(lane);
+        return;
+      }
       refreshPressedLanes();
       releaseLane(lane);
     };
@@ -1020,23 +1326,31 @@ export default function App() {
     bindingLane,
     calibrationOpen,
     closeCalibration,
+    closeTutorial,
     pauseGame,
     pressLane,
     recordCalibrationTap,
     refreshPressedLanes,
     releaseLane,
+    settingsDrawerOpen,
+    tutorialLanePress,
+    tutorialLaneRelease,
+    tutorialOpen,
   ]);
 
   useEffect(
     () => () => {
       if (milestoneTimerRef.current)
         window.clearTimeout(milestoneTimerRef.current);
+      if (comboBreakTimerRef.current)
+        window.clearTimeout(comboBreakTimerRef.current);
       if (calibrationPreviewTimerRef.current)
         window.clearTimeout(calibrationPreviewTimerRef.current);
       calibrationRunningRef.current = false;
       calibrationClockRef.current = null;
       calibrationSamplesRef.current = [];
       calibrationSeenBeatsRef.current.clear();
+      auxiliaryAudioRef.current.stop();
       engineRef.current?.dispose();
     },
     [],
@@ -1099,7 +1413,7 @@ export default function App() {
     return runtimeRef.current.visible(visualChartTime, approachSeconds);
   }, [approachSeconds, phase, stats.judgedNotes, visualChartTime]);
 
-  const liveAccuracy = session ? calculateAccuracy(stats) : 100;
+  const liveAccuracy = session ? calculateAccuracy(stats) : 0;
   const liveScore = session ? calculateSessionScore(stats, session) : 0;
   const progress = session
     ? clamp(clock.rawTime / session.chart.song.duration, 0, 1)
@@ -1110,14 +1424,14 @@ export default function App() {
   const isSettingsLocked = FOCUS_PHASES.includes(phase);
   const isSessionActive = phase !== "idle" && phase !== "results";
   const audioState = engineRef.current?.getState() ?? "uninitialized";
-  const selectedRecord = chart
-    ? records.entries[recordKey(chart.song.id, chart.difficulty)]
-    : undefined;
   const displayedResult = phase === "results" ? result : lastResult;
+  const displayState = deriveProductDisplayState(
+    phase,
+    Boolean(displayedResult),
+  );
   const panelStats = displayedResult?.stats ?? stats;
   const panelScore = displayedResult?.score ?? liveScore;
   const panelAccuracy = displayedResult?.accuracy ?? liveAccuracy;
-  const panelMode = displayedResult && !isSessionActive ? "last" : "live";
   const stageSong = session?.chart.song ?? selectedSong;
   const stageDifficulty = session?.difficulty ?? menuDifficulty;
 
@@ -1243,83 +1557,130 @@ export default function App() {
       <section className="game-layout" aria-label="Neon Pulse 四键节奏游戏台">
         <aside
           className="side-card stats-card"
-          aria-label={panelMode === "live" ? "实时成绩" : "上一局结果"}
+          aria-label={
+            displayState.statsPanel === "live"
+              ? "实时成绩"
+              : displayState.statsPanel === "last-result"
+                ? "上一局结果"
+                : "等待开始"
+          }
         >
           <div className="card-heading">
             <span className="card-label">
-              {panelMode === "live" ? "实时数据" : "上一局结果"}
+              {displayState.statsPanel === "live"
+                ? "实时数据"
+                : displayState.statsPanel === "last-result"
+                  ? "上一局结果"
+                  : "演奏状态"}
             </span>
             <span className="tiny-index">
               {displayedResult
                 ? `${displayedResult.songTitle} · ${displayedResult.difficulty.toUpperCase()}`
-                : "等待开始"}
+                : `${selectedSong.title} · ${menuDifficulty.toUpperCase()}`}
             </span>
           </div>
-          <div className="score-block">
-            <span>SCORE / 1M</span>
-            <strong data-testid="score">{formatScore(panelScore)}</strong>
-          </div>
-          <div className="primary-stats">
-            <div>
-              <span>COMBO</span>
-              <strong data-testid="combo">{panelStats.combo}</strong>
-            </div>
-            <div>
-              <span>MAX COMBO</span>
-              <strong>{panelStats.maxCombo}</strong>
-            </div>
-            <div>
-              <span>ACCURACY</span>
-              <strong>{panelAccuracy.toFixed(2)}%</strong>
-            </div>
-          </div>
-          <div className="life-readout">
-            <div>
-              <span>SIGNAL / LIFE</span>
-              <b>{panelStats.life}%</b>
-            </div>
-            <div
-              className="life-track"
-              role="meter"
-              aria-label="生命值"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={panelStats.life}
-            >
-              <span style={{ width: `${panelStats.life}%` }} />
-            </div>
-          </div>
-          <div className="judgement-list" aria-label="判定统计">
-            {(["perfect", "great", "good", "miss"] as Judgement[]).map(
-              (judgement) => (
-                <div key={judgement} className={`count-${judgement}`}>
-                  <span>{judgement.toUpperCase()}</span>
-                  <b>{String(panelStats.counts[judgement]).padStart(2, "0")}</b>
+          {displayState.statsPanel === "waiting" ? (
+            <div className="waiting-state" data-testid="waiting-state">
+              <span>WAITING</span>
+              <strong>等待开始</strong>
+              <p>选择歌曲与难度，准备好后按右侧开始按钮。</p>
+              <dl>
+                <div>
+                  <dt>BPM</dt>
+                  <dd>{selectedSong.bpm}</dd>
                 </div>
-              ),
-            )}
-          </div>
-          <div className="hold-readout">
-            <span>
-              HOLD COMPLETE <b>{panelStats.holdCompleted}</b>
-            </span>
-            <span>
-              BREAK <b>{panelStats.holdBroken}</b>
-            </span>
-            <span>
-              主判定 <b>{judgementCount(panelStats)}</b>
-              {displayedResult ? ` / ${displayedResult.noteCount}` : ""}
-            </span>
-          </div>
-          {panelMode === "live" && (
+                <div>
+                  <dt>时长</dt>
+                  <dd>{formatClockTime(selectedSong.duration)}</dd>
+                </div>
+                <div>
+                  <dt>音符</dt>
+                  <dd>{chart?.noteCount ?? "--"}</dd>
+                </div>
+              </dl>
+            </div>
+          ) : (
+            <>
+              <div className="score-block">
+                <span>SCORE / 1M</span>
+                <strong data-testid="score">{formatScore(panelScore)}</strong>
+              </div>
+              <div className="primary-stats">
+                <div>
+                  <span>COMBO</span>
+                  <strong data-testid="combo">{panelStats.combo}</strong>
+                </div>
+                <div>
+                  <span>MAX COMBO</span>
+                  <strong>{panelStats.maxCombo}</strong>
+                </div>
+                <div>
+                  <span>ACCURACY</span>
+                  <strong>{panelAccuracy.toFixed(2)}%</strong>
+                </div>
+              </div>
+              <div className="life-readout">
+                <div>
+                  <span>SIGNAL / LIFE</span>
+                  <b>{panelStats.life}%</b>
+                </div>
+                <div
+                  className="life-track"
+                  role="meter"
+                  aria-label="生命值"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={panelStats.life}
+                >
+                  <span style={{ width: `${panelStats.life}%` }} />
+                </div>
+              </div>
+              <div className="judgement-list" aria-label="判定统计">
+                {(["perfect", "great", "good", "miss"] as Judgement[]).map(
+                  (judgement) => (
+                    <div key={judgement} className={`count-${judgement}`}>
+                      <span>{judgement.toUpperCase()}</span>
+                      <b>
+                        {String(panelStats.counts[judgement]).padStart(2, "0")}
+                      </b>
+                    </div>
+                  ),
+                )}
+              </div>
+              <div className="hold-readout">
+                <span>
+                  HOLD COMPLETE <b>{panelStats.holdCompleted}</b>
+                </span>
+                <span>
+                  BREAK <b>{panelStats.holdBroken}</b>
+                </span>
+                <span>
+                  主判定 <b>{judgementCount(panelStats)}</b>
+                  {displayedResult ? ` / ${displayedResult.noteCount}` : ""}
+                </span>
+              </div>
+            </>
+          )}
+          {displayState.statsPanel === "live" ? (
             <div className="time-readout">
-              <span>{formatTime(clock.rawTime)}</span>
+              <span>{formatClockTime(clock.rawTime)}</span>
               <i>
                 <b style={{ transform: `scaleX(${progress})` }} />
               </i>
-              <span>{formatTime(session?.chart.song.duration ?? 0)}</span>
+              <span>{formatClockTime(session?.chart.song.duration ?? 0)}</span>
             </div>
-          )}
+          ) : displayState.statsPanel === "waiting" ? (
+            <div
+              className="time-readout waiting-time"
+              data-testid="waiting-time"
+            >
+              <span>0:00</span>
+              <i>
+                <b style={{ transform: "scaleX(0)" }} />
+              </i>
+              <span>{formatClockTime(selectedSong.duration)}</span>
+            </div>
+          ) : null}
         </aside>
 
         <section
@@ -1339,25 +1700,44 @@ export default function App() {
         >
           <div className="stage-topline">
             <div>
-              <span>NOW PLAYING</span>
+              <span>
+                {displayState.showRuntimeMetrics ? "NOW PLAYING" : "已选择"}
+              </span>
               <b>
                 {stageSong.title} · {stageDifficulty.toUpperCase()}
               </b>
             </div>
-            <div className="stage-live-stats">
-              <span>
-                SCORE <b>{formatScore(liveScore)}</b>
-              </span>
-              <span>
-                ACC <b>{liveAccuracy.toFixed(1)}%</b>
-              </span>
-              <span className={stats.life < 30 ? "is-low-life" : ""}>
-                LIFE <b>{stats.life}%</b>
-              </span>
-              <span>
-                {stageDifficulty.toUpperCase()} · {Math.round(progress * 100)}%
-              </span>
-            </div>
+            {displayState.showRuntimeMetrics ? (
+              <div className="stage-live-stats" data-testid="live-hud">
+                <span>
+                  SCORE <b>{formatScore(liveScore)}</b>
+                </span>
+                <span>
+                  ACC <b>{liveAccuracy.toFixed(1)}%</b>
+                </span>
+                <span
+                  className={`hud-life ${stats.life < 30 ? "is-low-life" : ""}`}
+                >
+                  LIFE <b>{stats.life}%</b>
+                  <i aria-hidden="true">
+                    <em style={{ width: `${stats.life}%` }} />
+                  </i>
+                </span>
+                <span>
+                  {stageDifficulty.toUpperCase()} · {Math.round(progress * 100)}
+                  %
+                </span>
+              </div>
+            ) : (
+              <div className="stage-selection-meta" data-testid="selection-hud">
+                <span>{selectedSong.bpm} BPM</span>
+                <span>{formatClockTime(selectedSong.duration)}</span>
+                <span>{chart?.noteCount ?? "--"} 音符</span>
+                <span>
+                  {menuDifficulty.toUpperCase()} · LV.{chart?.level ?? "--"}
+                </span>
+              </div>
+            )}
             <div className="stage-toolbar">
               {ACTIVE_PHASES.includes(phase) && (
                 <button
@@ -1442,15 +1822,20 @@ export default function App() {
               );
             })}
 
-            {FOCUS_PHASES.includes(phase) && (
+            {FOCUS_PHASES.includes(phase) && stats.combo > 0 && (
               <div
-                className={`combo-hud ${stats.combo === 0 ? "is-zero" : ""} ${comboMilestone ? "is-milestone" : ""}`}
+                className={`combo-hud ${comboMilestone ? "is-milestone" : ""}`}
                 aria-live="polite"
               >
                 <strong>{stats.combo}</strong>
                 <span>
                   {comboMilestone ? `${comboMilestone} MILESTONE` : "COMBO"}
                 </span>
+              </div>
+            )}
+            {FOCUS_PHASES.includes(phase) && comboBreak && (
+              <div className="combo-break" aria-live="polite">
+                COMBO BREAK
               </div>
             )}
 
@@ -1640,333 +2025,451 @@ export default function App() {
 
         <aside className="side-card control-card" aria-label="歌曲与控制设置">
           <div className="card-heading">
-            <span className="card-label">CONTROL DECK</span>
-            <span className="tiny-index">02 / CONFIG</span>
+            <span className="card-label">演奏控制</span>
+            <span className="tiny-index">TRACK / CONFIG</span>
           </div>
-          <div className="song-selector" aria-label="选择歌曲">
-            {SONG_CATALOG.map((song, index) => (
+
+          <div className="control-primary">
+            <div className="song-selector" aria-label="选择歌曲">
+              {SONG_CATALOG.map((song, index) => (
+                <div
+                  className={`song-option ${song.id === menuSongId ? "is-selected" : ""}`}
+                  key={song.id}
+                >
+                  <button
+                    type="button"
+                    className="song-select-button"
+                    onClick={() => {
+                      stopSongPreview();
+                      setMenuSongId(song.id);
+                    }}
+                    disabled={isSettingsLocked}
+                    aria-pressed={song.id === menuSongId}
+                  >
+                    <span
+                      className={`song-art art-${song.accent}`}
+                      aria-hidden="true"
+                    >
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                    <span className="song-copy">
+                      <small>TRACK {String(index + 1).padStart(2, "0")}</small>
+                      <b>{song.title}</b>
+                      <em>{song.artist}</em>
+                      <span className="song-meta">
+                        {song.bpm} BPM · {formatClockTime(song.duration)}
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`song-preview-button ${previewSongId === song.id ? "is-playing" : ""}`}
+                    onClick={() => void toggleSongPreview(song.id)}
+                    disabled={
+                      isSettingsLocked || calibrationOpen || tutorialOpen
+                    }
+                    aria-pressed={previewSongId === song.id}
+                    aria-label={`${previewSongId === song.id ? "停止" : "试听"} ${song.title}`}
+                  >
+                    {previewSongId === song.id ? "停止" : "试听 10s"}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <DifficultySelector
+              value={menuDifficulty}
+              levels={difficultyLevels}
+              details={difficultyDetails}
+              disabled={isSettingsLocked}
+              onChange={setMenuDifficulty}
+            />
+
+            <div className="quick-tools">
               <button
                 type="button"
-                className={song.id === menuSongId ? "is-selected" : ""}
-                onClick={() => setMenuSongId(song.id)}
+                onClick={() => {
+                  stopSongPreview();
+                  closeTutorial(false);
+                  setCalibrationOpen(true);
+                }}
                 disabled={isSettingsLocked}
-                aria-pressed={song.id === menuSongId}
-                key={song.id}
               >
-                <span
-                  className={`song-art art-${song.accent}`}
-                  aria-hidden="true"
-                >
-                  <i />
-                  <i />
-                  <i />
-                </span>
-                <span>
-                  <small>NP / {String(index + 1).padStart(3, "0")}</small>
-                  <b>{song.title}</b>
-                  <em>{song.artist}</em>
-                </span>
-                <span className="song-meta">
-                  {song.bpm} BPM · {formatTime(song.duration)}
-                </span>
+                延迟校准
               </button>
-            ))}
-          </div>
-          <div className="track-card selected-track-summary">
-            <span className="track-number">SELECTED TRACK</span>
-            <div>
-              <h2>{selectedSong.title}</h2>
-              <p>{selectedSong.subtitle}</p>
+              <button type="button" onClick={() => void toggleFullscreen()}>
+                {fullscreen ? "退出全屏" : "全屏"}
+              </button>
+              {compactControls && (
+                <button
+                  type="button"
+                  ref={settingsTriggerRef}
+                  onClick={() => setSettingsDrawerOpen(true)}
+                  disabled={isSettingsLocked}
+                >
+                  打开设置
+                </button>
+              )}
             </div>
-            <div className="track-tags">
-              <span>{selectedSong.bpm} BPM</span>
-              <span>{formatTime(selectedSong.duration)}</span>
-              <span>
-                {menuDifficulty.toUpperCase()}{" "}
-                {chart ? `LV.${chart.level}` : "ERROR"}
-              </span>
+
+            <div className="control-actions">
+              {(phase === "idle" || phase === "results") && (
+                <button
+                  className="deck-primary"
+                  type="button"
+                  onClick={() => void startGame()}
+                  disabled={!chart}
+                >
+                  <span>{phase === "results" ? "再次演奏" : "开始演奏"}</span>
+                  <b>{phase === "results" ? "↻" : "▶"}</b>
+                </button>
+              )}
+              {ACTIVE_PHASES.includes(phase) && (
+                <button
+                  className="deck-primary"
+                  type="button"
+                  onClick={() => void pauseGame(false)}
+                >
+                  <span>暂停</span>
+                  <b>Ⅱ</b>
+                </button>
+              )}
+              {phase === "paused" && (
+                <button
+                  className="deck-primary"
+                  type="button"
+                  onClick={() => void resumeGame()}
+                >
+                  <span>继续</span>
+                  <b>▶</b>
+                </button>
+              )}
+              {isBusy && (
+                <button className="deck-primary" type="button" disabled>
+                  <span>请稍候</span>
+                  <b>···</b>
+                </button>
+              )}
+              {isSessionActive && (
+                <div className="secondary-actions">
+                  <button
+                    type="button"
+                    onClick={() => void startGame()}
+                    disabled={isBusy}
+                  >
+                    重新开始
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void requestAbandon()}
+                    disabled={isBusy}
+                  >
+                    放弃本局
+                  </button>
+                </div>
+              )}
             </div>
           </div>
-          <DifficultySelector
-            value={menuDifficulty}
-            levels={difficultyLevels}
-            details={difficultyDetails}
-            disabled={isSettingsLocked}
-            onChange={setMenuDifficulty}
-          />
-          {selectedRecord && (
-            <div className="best-record">
-              <span>PERSONAL BEST</span>
-              <b>{formatScore(selectedRecord.bestScore)}</b>
-              <small>
-                {selectedRecord.bestAccuracy.toFixed(2)}% ·{" "}
-                {selectedRecord.bestGrade} RANK{" "}
-                {selectedRecord.ap ? "· AP" : selectedRecord.fc ? "· FC" : ""}
-              </small>
+
+          {(!compactControls || settingsDrawerOpen) && (
+            <div
+              className={`settings-panel ${compactControls ? "is-drawer" : ""}`}
+              role={compactControls ? "dialog" : "region"}
+              aria-modal={compactControls || undefined}
+              aria-label="游戏设置"
+            >
+              <div className="settings-heading">
+                <span>游戏设置</span>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setSettings(DEFAULT_SETTINGS)}
+                    disabled={isSettingsLocked}
+                  >
+                    全部重置
+                  </button>
+                  {compactControls && (
+                    <button
+                      type="button"
+                      className="drawer-close"
+                      onClick={() => {
+                        setSettingsDrawerOpen(false);
+                        settingsTriggerRef.current?.focus();
+                      }}
+                      aria-label="关闭设置"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className="settings-tabs"
+                role="tablist"
+                aria-label="设置分类"
+              >
+                {CONTROL_TABS.map((tab, index) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeControlTab === tab.id}
+                    aria-controls={`settings-${tab.id}`}
+                    tabIndex={activeControlTab === tab.id ? 0 : -1}
+                    className={activeControlTab === tab.id ? "is-active" : ""}
+                    ref={(element) => {
+                      controlTabRefs.current[index] = element;
+                    }}
+                    onClick={() => setActiveControlTab(tab.id)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key !== "ArrowLeft" &&
+                        event.key !== "ArrowRight"
+                      )
+                        return;
+                      event.preventDefault();
+                      const direction = event.key === "ArrowRight" ? 1 : -1;
+                      const next =
+                        (index + direction + CONTROL_TABS.length) %
+                        CONTROL_TABS.length;
+                      setActiveControlTab(CONTROL_TABS[next].id);
+                      controlTabRefs.current[next]?.focus();
+                    }}
+                    key={tab.id}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {activeControlTab === "gameplay" && (
+                <div
+                  className="settings-tab-panel"
+                  id="settings-gameplay"
+                  role="tabpanel"
+                >
+                  <label className="range-control">
+                    <span>
+                      <b>音符速度</b>
+                      <output>{settings.noteSpeed.toFixed(2)}×</output>
+                    </span>
+                    <input
+                      type="range"
+                      min={SETTINGS_LIMITS.noteSpeed.minimum}
+                      max={SETTINGS_LIMITS.noteSpeed.maximum}
+                      step="0.05"
+                      value={settings.noteSpeed}
+                      disabled={isSettingsLocked}
+                      onChange={(event) =>
+                        updateSetting("noteSpeed", Number(event.target.value))
+                      }
+                    />
+                  </label>
+                  <div className="offset-grid">
+                    <label className="range-control">
+                      <span>
+                        <b>判定偏移</b>
+                        <output>
+                          {settings.audioOffsetMs >= 0 ? "+" : ""}
+                          {settings.audioOffsetMs}ms
+                        </output>
+                      </span>
+                      <input
+                        type="range"
+                        min={SETTINGS_LIMITS.audioOffsetMs.minimum}
+                        max={SETTINGS_LIMITS.audioOffsetMs.maximum}
+                        step="5"
+                        value={settings.audioOffsetMs}
+                        disabled={isSettingsLocked}
+                        onChange={(event) =>
+                          updateSetting(
+                            "audioOffsetMs",
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                    <label className="range-control">
+                      <span>
+                        <b>视觉偏移</b>
+                        <output>
+                          {settings.visualOffsetMs >= 0 ? "+" : ""}
+                          {settings.visualOffsetMs}ms
+                        </output>
+                      </span>
+                      <input
+                        type="range"
+                        min={SETTINGS_LIMITS.visualOffsetMs.minimum}
+                        max={SETTINGS_LIMITS.visualOffsetMs.maximum}
+                        step="5"
+                        value={settings.visualOffsetMs}
+                        disabled={isSettingsLocked}
+                        onChange={(event) =>
+                          updateSetting(
+                            "visualOffsetMs",
+                            Number(event.target.value),
+                          )
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className="range-control">
+                    <span>
+                      <b>特效强度</b>
+                      <output>
+                        {Math.round(settings.effectIntensity * 100)}%
+                      </output>
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={settings.effectIntensity}
+                      onChange={(event) =>
+                        updateSetting(
+                          "effectIntensity",
+                          Number(event.target.value),
+                        )
+                      }
+                    />
+                  </label>
+                  <p className="offset-help">
+                    判定偏移调整按键时机；视觉偏移只改变音符位置。正值更晚，负值更早。
+                  </p>
+                  <div className="toggle-grid">
+                    <button
+                      type="button"
+                      className={settings.screenShake ? "is-on" : ""}
+                      onClick={() =>
+                        updateSetting("screenShake", !settings.screenShake)
+                      }
+                      aria-pressed={settings.screenShake}
+                    >
+                      震屏 {settings.screenShake ? "开" : "关"}
+                    </button>
+                    <button
+                      type="button"
+                      className={settings.haptics ? "is-on" : ""}
+                      onClick={() =>
+                        updateSetting("haptics", !settings.haptics)
+                      }
+                      aria-pressed={settings.haptics}
+                    >
+                      触觉 {settings.haptics ? "开" : "关"}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    className="tutorial-reopen"
+                    onClick={() => void openTutorial()}
+                    disabled={isSettingsLocked}
+                  >
+                    重新查看新手教程
+                  </button>
+                </div>
+              )}
+
+              {activeControlTab === "sound" && (
+                <div
+                  className="settings-tab-panel"
+                  id="settings-sound"
+                  role="tabpanel"
+                >
+                  {(
+                    [
+                      ["masterVolume", "主音量"],
+                      ["musicVolume", "音乐音量"],
+                      ["hitVolume", "打击音量"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <label className="range-control volume-control" key={key}>
+                      <span>
+                        <b>{label}</b>
+                        <output>{Math.round(settings[key] * 100)}%</output>
+                      </span>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        value={settings[key]}
+                        onChange={(event) =>
+                          updateSetting(key, Number(event.target.value))
+                        }
+                      />
+                    </label>
+                  ))}
+                  <button
+                    type="button"
+                    className={`mute-button ${settings.muted ? "is-muted" : ""}`}
+                    onClick={() => updateSetting("muted", !settings.muted)}
+                    aria-pressed={settings.muted}
+                  >
+                    {settings.muted ? "取消静音" : "全部静音"}
+                  </button>
+                  <p className="settings-note">
+                    试听、延迟校准和正式演奏会自动互斥，切换时立即释放旧音频。
+                  </p>
+                </div>
+              )}
+
+              {activeControlTab === "keys" && (
+                <div
+                  className="settings-tab-panel key-settings"
+                  id="settings-keys"
+                  role="tabpanel"
+                  aria-label="自定义键位"
+                >
+                  <div>
+                    <b>四轨键位</b>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateSetting("laneBindings", [
+                          ...DEFAULT_LANE_BINDINGS,
+                        ])
+                      }
+                      disabled={isSettingsLocked}
+                    >
+                      恢复 D/F/J/K
+                    </button>
+                  </div>
+                  <div className="key-binding-grid">
+                    {settings.laneBindings.map((code, laneIndex) => {
+                      const lane = laneIndex as Lane;
+                      return (
+                        <button
+                          type="button"
+                          className={bindingLane === lane ? "is-listening" : ""}
+                          onClick={() => setBindingLane(lane)}
+                          disabled={isSettingsLocked}
+                          aria-label={`设置第 ${lane + 1} 轨按键，当前 ${bindingLabel(code)}`}
+                          key={lane}
+                        >
+                          <small>轨道 {lane + 1}</small>
+                          <kbd>
+                            {bindingLane === lane ? "…" : bindingLabel(code)}
+                          </kbd>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {bindingLane !== null && (
+                    <p role="status">
+                      请按下第 {bindingLane + 1} 轨的新按键；Esc 取消。
+                    </p>
+                  )}
+                  <p className="settings-note">
+                    新键位会立即同步到演奏轨道和底部提示；重复键位无法保存。
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="control-actions">
-            {(phase === "idle" || phase === "results") && (
-              <button
-                className="deck-primary"
-                type="button"
-                onClick={() => void startGame()}
-                disabled={!chart}
-              >
-                <span>{phase === "results" ? "REPLAY" : "START"}</span>
-                <b>{phase === "results" ? "↻" : "▶"}</b>
-              </button>
-            )}
-            {ACTIVE_PHASES.includes(phase) && (
-              <button
-                className="deck-primary"
-                type="button"
-                onClick={() => void pauseGame(false)}
-              >
-                <span>PAUSE</span>
-                <b>Ⅱ</b>
-              </button>
-            )}
-            {phase === "paused" && (
-              <button
-                className="deck-primary"
-                type="button"
-                onClick={() => void resumeGame()}
-              >
-                <span>CONTINUE</span>
-                <b>▶</b>
-              </button>
-            )}
-            {isBusy && (
-              <button className="deck-primary" type="button" disabled>
-                <span>PLEASE WAIT</span>
-                <b>···</b>
-              </button>
-            )}
-            {isSessionActive && (
-              <div className="secondary-actions">
-                <button
-                  type="button"
-                  onClick={() => void startGame()}
-                  disabled={isBusy}
-                >
-                  重新开始
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void requestAbandon()}
-                  disabled={isBusy}
-                >
-                  放弃本局
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="settings-panel">
-            <div className="settings-heading">
-              <span>演奏与声音设置</span>
-              <button
-                type="button"
-                onClick={() => setSettings(DEFAULT_SETTINGS)}
-                disabled={isSettingsLocked}
-              >
-                全部重置
-              </button>
-            </div>
-            <label className="range-control">
-              <span>
-                <b>音符速度</b>
-                <output>{settings.noteSpeed.toFixed(2)}×</output>
-              </span>
-              <input
-                type="range"
-                min={SETTINGS_LIMITS.noteSpeed.minimum}
-                max={SETTINGS_LIMITS.noteSpeed.maximum}
-                step="0.05"
-                value={settings.noteSpeed}
-                disabled={isSettingsLocked}
-                onChange={(event) =>
-                  updateSetting("noteSpeed", Number(event.target.value))
-                }
-              />
-              <small>
-                慢 <i /> 快
-              </small>
-            </label>
-            <label className="range-control">
-              <span>
-                <b>判定偏移</b>
-                <output>
-                  {settings.audioOffsetMs >= 0 ? "+" : ""}
-                  {settings.audioOffsetMs}ms
-                </output>
-              </span>
-              <input
-                type="range"
-                min={SETTINGS_LIMITS.audioOffsetMs.minimum}
-                max={SETTINGS_LIMITS.audioOffsetMs.maximum}
-                step="5"
-                value={settings.audioOffsetMs}
-                disabled={isSettingsLocked}
-                onChange={(event) =>
-                  updateSetting("audioOffsetMs", Number(event.target.value))
-                }
-              />
-              <small>
-                更早 <i /> 更晚
-              </small>
-            </label>
-            <label className="range-control">
-              <span>
-                <b>视觉偏移</b>
-                <output>
-                  {settings.visualOffsetMs >= 0 ? "+" : ""}
-                  {settings.visualOffsetMs}ms
-                </output>
-              </span>
-              <input
-                type="range"
-                min={SETTINGS_LIMITS.visualOffsetMs.minimum}
-                max={SETTINGS_LIMITS.visualOffsetMs.maximum}
-                step="5"
-                value={settings.visualOffsetMs}
-                disabled={isSettingsLocked}
-                onChange={(event) =>
-                  updateSetting("visualOffsetMs", Number(event.target.value))
-                }
-              />
-              <small>
-                更早显示 <i /> 更晚显示
-              </small>
-            </label>
-            <p className="offset-help">
-              判定偏移只改变按键时机，视觉偏移只改变音符位置。正值更晚，负值更早。
-            </p>
-            {(
-              [
-                ["masterVolume", "主音量"],
-                ["musicVolume", "音乐音量"],
-                ["hitVolume", "打击音量"],
-              ] as const
-            ).map(([key, label]) => (
-              <label className="range-control volume-control" key={key}>
-                <span>
-                  <b>{label}</b>
-                  <output>{Math.round(settings[key] * 100)}%</output>
-                </span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={settings[key]}
-                  onChange={(event) =>
-                    updateSetting(key, Number(event.target.value))
-                  }
-                />
-              </label>
-            ))}
-            <label className="range-control volume-control">
-              <span>
-                <b>特效强度</b>
-                <output>{Math.round(settings.effectIntensity * 100)}%</output>
-              </span>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={settings.effectIntensity}
-                onChange={(event) =>
-                  updateSetting("effectIntensity", Number(event.target.value))
-                }
-              />
-            </label>
-            <div className="toggle-grid">
-              <button
-                type="button"
-                className={settings.screenShake ? "is-on" : ""}
-                onClick={() =>
-                  updateSetting("screenShake", !settings.screenShake)
-                }
-                aria-pressed={settings.screenShake}
-              >
-                轻微震屏 {settings.screenShake ? "开" : "关"}
-              </button>
-              <button
-                type="button"
-                className={settings.haptics ? "is-on" : ""}
-                onClick={() => updateSetting("haptics", !settings.haptics)}
-                aria-pressed={settings.haptics}
-              >
-                触觉反馈 {settings.haptics ? "开" : "关"}
-              </button>
-            </div>
-            <div className="key-settings" aria-label="自定义键位">
-              <div>
-                <b>四轨键位</b>
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateSetting("laneBindings", [...DEFAULT_LANE_BINDINGS])
-                  }
-                  disabled={isSettingsLocked}
-                >
-                  恢复 D/F/J/K
-                </button>
-              </div>
-              <div className="key-binding-grid">
-                {settings.laneBindings.map((code, laneIndex) => {
-                  const lane = laneIndex as Lane;
-                  return (
-                    <button
-                      type="button"
-                      className={bindingLane === lane ? "is-listening" : ""}
-                      onClick={() => setBindingLane(lane)}
-                      disabled={isSettingsLocked}
-                      aria-label={`设置第 ${lane + 1} 轨按键，当前 ${bindingLabel(code)}`}
-                      key={lane}
-                    >
-                      <small>轨道 {lane + 1}</small>
-                      <kbd>
-                        {bindingLane === lane ? "…" : bindingLabel(code)}
-                      </kbd>
-                    </button>
-                  );
-                })}
-              </div>
-              {bindingLane !== null && (
-                <p role="status">
-                  请按下第 {bindingLane + 1} 轨的新按键；Esc 取消。
-                </p>
-              )}
-            </div>
-            <div className="sound-actions">
-              <button
-                type="button"
-                className={settings.muted ? "is-muted" : ""}
-                onClick={() => updateSetting("muted", !settings.muted)}
-                aria-pressed={settings.muted}
-              >
-                {settings.muted ? "🔇 取消静音" : "🔊 静音"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalibrationOpen(true)}
-                disabled={isSettingsLocked}
-              >
-                4 预热拍 + 16 样本校准
-              </button>
-            </div>
-          </div>
-
-          <div className="utility-actions">
-            <button type="button" onClick={() => void toggleFullscreen()}>
-              {fullscreen ? "退出全屏" : "进入全屏"}
-            </button>
-          </div>
           <div className="keyboard-hint">
             {settings.laneBindings.map((code, lane) => (
               <kbd key={lane}>{bindingLabel(code)}</kbd>
@@ -2002,6 +2505,18 @@ export default function App() {
           updateSetting("audioOffsetMs", offsetMs);
           void stopCalibration(true);
         }}
+      />
+      <TutorialPanel
+        open={tutorialOpen}
+        step={tutorialStep}
+        actionComplete={tutorialActionComplete}
+        bindings={settings.laneBindings}
+        beatPlaying={tutorialBeatPlaying}
+        onLanePress={tutorialLanePress}
+        onLaneRelease={tutorialLaneRelease}
+        onPlayBeat={() => void playTutorialBeat()}
+        onNext={advanceTutorial}
+        onSkip={() => closeTutorial(true)}
       />
     </main>
   );

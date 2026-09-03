@@ -27,6 +27,7 @@ export interface ChartDefinition {
   songId: string;
   difficulty: DifficultyId;
   level: number;
+  description: string;
   notes: ChartNote[];
 }
 

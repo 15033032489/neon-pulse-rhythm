@@ -2227,6 +2227,846 @@ h1 em {
   }
 }
 
+/* Fourth-round product information architecture and tutorial */
+.waiting-state {
+  min-height: 300px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.waiting-state > span {
+  color: var(--cyan);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.waiting-state > strong {
+  font-size: clamp(24px, 3vw, 34px);
+  letter-spacing: -0.04em;
+}
+
+.waiting-state > p {
+  margin: 0 auto;
+  max-width: 180px;
+  color: #aaa8bb;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.waiting-state dl {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.waiting-state dl > div {
+  padding: 9px 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.waiting-state dt {
+  color: #9290a5;
+  font-size: 11px;
+}
+
+.waiting-state dd {
+  margin: 4px 0 0;
+  color: #f5f4ff;
+  font:
+    800 14px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+}
+
+.waiting-time {
+  display: grid;
+}
+
+.stage-selection-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.stage-selection-meta span {
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #c5c3d4;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.hud-life {
+  display: grid !important;
+  grid-template-columns: auto auto;
+  align-items: center;
+  column-gap: 4px;
+}
+
+.hud-life > i {
+  grid-column: 1 / -1;
+  width: 64px;
+  height: 3px;
+  margin-top: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.hud-life > i > em {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lime);
+}
+
+.hud-life.is-low-life > i > em {
+  background: var(--red);
+  box-shadow: 0 0 8px var(--red);
+}
+
+.combo-break {
+  position: absolute;
+  z-index: 9;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #ff8aa5;
+  font:
+    900 13px/1 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  letter-spacing: 0.12em;
+  text-shadow: 0 0 16px rgba(255, 85, 125, 0.55);
+  pointer-events: none;
+  animation: comboBreakIn 720ms ease-out both;
+}
+
+.control-card {
+  gap: 10px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.control-primary {
+  display: grid;
+  gap: 9px;
+}
+
+.song-selector {
+  margin-top: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+
+.song-option {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 11px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.025);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.song-option.is-selected {
+  border-color: rgba(67, 239, 255, 0.56);
+  background: rgba(67, 239, 255, 0.075);
+}
+
+.song-select-button {
+  min-width: 0;
+  min-height: 68px;
+  padding: 7px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.song-select-button .song-art {
+  grid-row: auto;
+  width: 48px;
+  height: 48px;
+}
+
+.song-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.song-copy small,
+.song-copy em,
+.song-copy .song-meta {
+  color: #aaa8bb;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.18;
+  letter-spacing: 0.01em;
+}
+
+.song-copy small {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.song-copy b {
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-copy .song-meta {
+  position: static;
+  grid-column: auto;
+  margin: 1px 0 0;
+  color: #c7c5d5;
+}
+
+.song-preview-button {
+  width: 43px;
+  padding: 4px;
+  border: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: #a9a7ba;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 11px;
+  line-height: 1.15;
+  cursor: pointer;
+}
+
+.song-preview-button.is-playing {
+  color: #071015;
+  background: var(--cyan);
+}
+
+.difficulty-picker {
+  display: grid;
+  gap: 7px;
+}
+
+.difficulty-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.difficulty-selector button {
+  min-height: 40px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 8px;
+}
+
+.difficulty-selector button span,
+.difficulty-selector button b {
+  font-size: 12px;
+}
+
+.difficulty-detail {
+  min-height: 63px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.difficulty-detail p {
+  margin: 0;
+  color: #c2c0d1;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.difficulty-detail > div {
+  margin-top: 5px;
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.difficulty-detail span {
+  color: #908da3;
+  font-size: 11px;
+}
+
+.quick-tools {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+
+.quick-tools button,
+.tutorial-reopen,
+.mute-button {
+  min-height: 34px;
+  border: 1px solid rgba(67, 239, 255, 0.2);
+  border-radius: 8px;
+  color: #d4faff;
+  background: rgba(67, 239, 255, 0.045);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.control-actions {
+  margin-top: 0;
+}
+
+.deck-primary {
+  min-height: 44px;
+  font-size: 13px;
+}
+
+.settings-panel {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 10px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: start;
+}
+
+.settings-heading,
+.settings-heading button,
+.range-control > span,
+.range-control output,
+.offset-help,
+.settings-note,
+.toggle-grid button,
+.key-settings > div:first-child,
+.key-settings > p {
+  font-size: 12px;
+  line-height: 1.4;
+  letter-spacing: 0.015em;
+}
+
+.settings-heading {
+  color: #d4d2e2;
+  font-size: 13px;
+}
+
+.settings-heading > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-heading button {
+  min-height: 30px;
+  color: #aaa8bb;
+}
+
+.settings-tabs {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+}
+
+.settings-tabs button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 7px;
+  color: #aaa8bb;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.settings-tabs button.is-active {
+  border-color: rgba(67, 239, 255, 0.45);
+  color: #eaffff;
+  background: rgba(67, 239, 255, 0.08);
+}
+
+.settings-tab-panel {
+  min-height: 0;
+}
+
+.range-control,
+.key-settings {
+  margin-top: 9px;
+}
+
+.range-control input {
+  margin-block: 5px 0;
+}
+
+.offset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.offset-help,
+.settings-note {
+  margin: 7px 0 0;
+  color: #aaa8bb;
+}
+
+.toggle-grid {
+  margin-top: 8px;
+}
+
+.toggle-grid button,
+.key-settings button {
+  font-size: 12px;
+}
+
+.tutorial-reopen,
+.mute-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.key-settings {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.key-binding-grid {
+  margin-top: 9px;
+}
+
+.key-binding-grid button {
+  min-height: 52px;
+}
+
+.key-binding-grid button small {
+  font-size: 11px;
+}
+
+.keyboard-hint {
+  position: static;
+  margin-top: auto;
+  padding-top: 5px;
+}
+
+.tutorial-backdrop {
+  z-index: 85;
+}
+
+.tutorial-panel {
+  width: min(680px, calc(100vw - 24px));
+  padding: clamp(22px, 4vw, 38px);
+  border: 1px solid rgba(67, 239, 255, 0.32);
+  border-radius: 20px;
+  background:
+    radial-gradient(
+      circle at 50% 12%,
+      rgba(67, 239, 255, 0.11),
+      transparent 38%
+    ),
+    #0a0b17;
+  box-shadow: 0 30px 100px rgba(0, 0, 0, 0.64);
+  text-align: center;
+}
+
+.tutorial-panel h2 {
+  margin: 12px 0 8px;
+  color: #fff;
+  font-size: clamp(27px, 5vw, 42px);
+  letter-spacing: -0.045em;
+}
+
+.tutorial-panel > p {
+  max-width: 540px;
+  margin: 0 auto;
+  color: #c0bed0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.tutorial-progress {
+  margin-bottom: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.tutorial-progress i {
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.tutorial-progress i.is-active {
+  background: var(--cyan);
+  box-shadow: 0 0 9px rgba(67, 239, 255, 0.5);
+}
+
+.tutorial-demo {
+  position: relative;
+  height: 128px;
+  margin: 20px 0 12px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 13px;
+  background: linear-gradient(
+    180deg,
+    rgba(149, 103, 255, 0.06),
+    rgba(67, 239, 255, 0.035)
+  );
+}
+
+.tutorial-demo > strong {
+  z-index: 2;
+  margin-top: 74px;
+  color: #e9fcff;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+.tutorial-note {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  color: var(--cyan);
+  font-size: 24px;
+  text-shadow: 0 0 12px var(--cyan);
+  animation: tutorialDrop 1.6s ease-in-out infinite;
+}
+
+.tutorial-step-2 .tutorial-note {
+  height: 62px;
+  padding: 4px 8px;
+  border: 1px solid currentColor;
+  background: rgba(67, 239, 255, 0.12);
+}
+
+.tutorial-line {
+  position: absolute;
+  right: 14px;
+  bottom: 27px;
+  left: 14px;
+  border-top: 2px solid var(--cyan);
+  color: #bdfaff;
+  font-size: 9px;
+  text-align: left;
+}
+
+.tutorial-lanes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+
+.tutorial-lanes button {
+  min-height: 60px;
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: #bdbacc;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+  touch-action: none;
+}
+
+.tutorial-lanes button:active {
+  border-color: var(--cyan);
+  color: #fff;
+  background: rgba(67, 239, 255, 0.12);
+}
+
+.tutorial-lanes kbd {
+  color: #fff;
+  font-size: 20px;
+}
+
+.tutorial-actions {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr auto;
+  gap: 8px;
+}
+
+.tutorial-actions > button {
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: #c8c6d7;
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.tutorial-actions .deck-primary {
+  color: #071015;
+  background: linear-gradient(90deg, var(--cyan), #a8f9ff);
+}
+
+.tutorial-actions .tutorial-skip {
+  color: #9491a5;
+}
+
+.tutorial-panel > small {
+  display: block;
+  margin-top: 10px;
+  color: #8f8ca1;
+  font-size: 11px;
+}
+
+@keyframes comboBreakIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.12);
+  }
+  30% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+}
+
+@keyframes tutorialDrop {
+  0% {
+    transform: translate(-50%, -10px);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  75% {
+    transform: translate(-50%, 70px);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, 83px);
+    opacity: 0;
+  }
+}
+
+@media (min-width: 921px) {
+  body {
+    height: 100svh;
+    overflow: hidden;
+  }
+
+  .app-shell:not(.is-focus-mode) {
+    height: 100svh;
+    min-height: 0;
+    padding-top: 12px;
+    padding-bottom: 8px;
+  }
+
+  .app-shell:not(.is-focus-mode) .topbar {
+    min-height: 54px;
+    margin-bottom: 8px;
+  }
+
+  .app-shell:not(.is-focus-mode) .game-layout {
+    height: calc(100svh - 104px);
+    min-height: 0;
+    max-height: none;
+  }
+
+  .app-shell:not(.is-focus-mode) .app-footer {
+    height: 26px;
+    padding-top: 8px;
+  }
+}
+
+@media (max-width: 1160px) {
+  .song-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .song-select-button {
+    min-height: 56px;
+  }
+
+  .song-select-button .song-art {
+    width: 42px;
+    height: 42px;
+  }
+}
+
+@media (max-width: 920px) {
+  body {
+    overflow-y: auto;
+  }
+
+  .control-card {
+    min-height: 0;
+    padding-bottom: 14px;
+  }
+
+  .song-selector {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .quick-tools {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .settings-panel.is-drawer {
+    position: fixed;
+    z-index: 80;
+    right: max(8px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    max-height: min(78svh, 680px);
+    padding: 18px;
+    overflow-y: auto;
+    border: 1px solid rgba(67, 239, 255, 0.3);
+    border-radius: 18px;
+    background: rgba(9, 10, 20, 0.98);
+    box-shadow: 0 -24px 80px rgba(0, 0, 0, 0.65);
+  }
+
+  .drawer-close {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 50%;
+    font-size: 20px !important;
+  }
+
+  .keyboard-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .song-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .song-select-button {
+    min-height: 62px;
+  }
+
+  .song-copy small,
+  .song-copy em,
+  .song-copy .song-meta,
+  .difficulty-detail p,
+  .difficulty-detail span,
+  .quick-tools button,
+  .settings-heading,
+  .settings-heading button,
+  .settings-tabs button,
+  .range-control > span,
+  .range-control output,
+  .offset-help,
+  .settings-note,
+  .toggle-grid button,
+  .key-settings button {
+    font-size: 12px;
+  }
+
+  .song-copy b,
+  .difficulty-selector button span,
+  .difficulty-selector button b {
+    font-size: 13px;
+  }
+
+  .quick-tools button {
+    min-height: 42px;
+  }
+
+  .stage-selection-meta {
+    justify-content: flex-start;
+  }
+
+  .stage-selection-meta span {
+    padding: 3px 5px;
+    font-size: 10px;
+  }
+
+  .tutorial-panel {
+    max-height: 94svh;
+    padding: 20px 14px;
+    overflow-y: auto;
+  }
+
+  .tutorial-panel > p {
+    font-size: 13px;
+  }
+
+  .tutorial-demo {
+    height: 112px;
+    margin-top: 14px;
+  }
+
+  .tutorial-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .tutorial-actions .tutorial-skip {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 600px) {
+  .app-shell:not(.is-focus-mode) .stage-card {
+    height: calc(100svh - 10px);
+  }
+
+  .settings-panel.is-drawer {
+    top: max(6px, env(safe-area-inset-top));
+    max-height: none;
+  }
+
+  .tutorial-panel {
+    max-height: 96svh;
+    overflow-y: auto;
+    padding-block: 14px;
+  }
+
+  .tutorial-demo {
+    height: 80px;
+    margin-block: 8px;
+  }
+
+  .tutorial-lanes button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combo-break,
+  .tutorial-note,
+  .tutorial-progress i,
+  .song-option {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 /* Upgrade: charts, holds, calibration, records, and focused play layout. */
 .runtime-error.is-info {
   border-color: rgba(67, 239, 255, 0.3);
@@ -3649,5 +4489,152 @@ button:disabled {
 
   .impact-flash {
     display: none !important;
+  }
+}
+
+/* Product-shell overrides are kept last so legacy responsive rules cannot
+   re-introduce the old tall three-column difficulty cards. */
+body.dialog-lock {
+  overflow: hidden !important;
+}
+
+.control-card {
+  min-height: 0;
+  gap: 10px;
+  padding: 14px;
+  overflow: hidden;
+}
+
+.song-selector {
+  margin-top: 0;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.difficulty-selector {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.difficulty-selector button {
+  min-height: 40px;
+  padding: 6px 8px;
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  align-content: center;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.difficulty-selector button span,
+.difficulty-selector button b,
+.song-copy b,
+.settings-heading,
+.settings-tabs button,
+.deck-primary {
+  font-size: 13px;
+}
+
+.song-copy em,
+.song-copy .song-meta,
+.difficulty-detail p,
+.quick-tools button,
+.range-control > span,
+.range-control output,
+.offset-help,
+.settings-note,
+.toggle-grid button,
+.key-settings button,
+.tutorial-reopen,
+.mute-button {
+  color: #bbb9ca;
+  font-size: 12px;
+}
+
+.settings-panel {
+  min-height: 0;
+  margin-top: 0;
+  padding-top: 10px;
+  overflow: hidden;
+}
+
+@media (min-width: 921px) {
+  .control-card .settings-tab-panel {
+    padding-right: 4px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}
+
+@media (max-width: 920px) {
+  .control-card {
+    min-height: 0;
+    padding-bottom: 14px;
+    overflow: visible;
+    backdrop-filter: none;
+  }
+
+  .song-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-panel.is-drawer {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .app-shell:not(.is-focus-mode) {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell:not(.is-focus-mode) .control-card .control-actions {
+    position: fixed;
+    z-index: 32;
+    right: max(10px, env(safe-area-inset-right));
+    bottom: max(10px, env(safe-area-inset-bottom));
+    left: max(10px, env(safe-area-inset-left));
+    padding: 6px;
+    border: 1px solid rgba(67, 239, 255, 0.24);
+    border-radius: 13px;
+    background: rgba(8, 10, 20, 0.94);
+    box-shadow: 0 -12px 34px rgba(0, 0, 0, 0.48);
+    backdrop-filter: blur(14px);
+  }
+}
+
+@media (max-width: 620px) {
+  .song-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .difficulty-selector {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .difficulty-selector button {
+    min-height: 44px;
+    padding-inline: 6px;
+    display: flex;
+    grid-template-columns: none;
+    text-align: center;
+  }
+
+  .difficulty-selector button span,
+  .difficulty-selector button b {
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combo-break,
+  .tutorial-note,
+  .tutorial-progress i,
+  .song-option,
+  .hud-life > i > em {
+    animation: none !important;
+    transition: none !important;
   }
 }

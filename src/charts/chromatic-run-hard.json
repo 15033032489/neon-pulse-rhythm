@@ -3,6 +3,7 @@
   "songId": "chromatic-run",
   "difficulty": "hard",
   "level": 9,
+  "description": "高速十六分复合节奏穿插外侧双押和持续声部，强调手型回收与爆发。",
   "notes": [
     {
       "id": "h001",
@@ -127,7 +128,7 @@
     {
       "id": "h021",
       "time": 4.6875,
-      "lane": 0,
+      "lane": 1,
       "type": "hold",
       "duration": 0.257813
     },
@@ -171,7 +172,8 @@
       "id": "h028",
       "time": 5.625,
       "lane": 0,
-      "type": "tap"
+      "type": "hold",
+      "duration": 0.46875
     },
     {
       "id": "h029",
@@ -290,7 +292,7 @@
     {
       "id": "h048",
       "time": 8.4375,
-      "lane": 0,
+      "lane": 3,
       "type": "hold",
       "duration": 0.257813
     },
@@ -453,7 +455,7 @@
     {
       "id": "h075",
       "time": 12.1875,
-      "lane": 0,
+      "lane": 1,
       "type": "hold",
       "duration": 0.257813
     },
@@ -497,7 +499,8 @@
       "id": "h082",
       "time": 13.125,
       "lane": 0,
-      "type": "tap"
+      "type": "hold",
+      "duration": 0.46875
     },
     {
       "id": "h083",
@@ -616,7 +619,7 @@
     {
       "id": "h102",
       "time": 15.9375,
-      "lane": 0,
+      "lane": 3,
       "type": "hold",
       "duration": 0.257813
     },
@@ -779,7 +782,7 @@
     {
       "id": "h129",
       "time": 19.6875,
-      "lane": 0,
+      "lane": 1,
       "type": "hold",
       "duration": 0.257813
     },
@@ -823,7 +826,8 @@
       "id": "h136",
       "time": 20.625,
       "lane": 0,
-      "type": "tap"
+      "type": "hold",
+      "duration": 0.46875
     },
     {
       "id": "h137",

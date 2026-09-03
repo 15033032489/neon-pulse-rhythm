@@ -3,6 +3,7 @@
   "songId": "midnight-arcade",
   "difficulty": "normal",
   "level": 6,
+  "description": "低速碎拍中加入反拍旋律、交替双押与长短 Hold，对齐夜行和弦转场。",
   "notes": [
     { "id": "ma-n-001", "time": 2.353, "lane": 0, "type": "tap" },
     { "id": "ma-n-002", "time": 2.941, "lane": 1, "type": "tap" },
@@ -62,7 +63,13 @@
       "duration": 1.176
     },
     { "id": "ma-n-040", "time": 25.294, "lane": 2, "type": "tap" },
-    { "id": "ma-n-041", "time": 25.882, "lane": 0, "type": "tap" },
+    {
+      "id": "ma-n-041",
+      "time": 25.882,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.882
+    },
     { "id": "ma-n-042", "time": 26.471, "lane": 3, "type": "tap" },
     { "id": "ma-n-043", "time": 27.059, "lane": 1, "type": "tap" },
     { "id": "ma-n-044", "time": 27.059, "lane": 2, "type": "tap" },

@@ -3,6 +3,7 @@
   "songId": "midnight-arcade",
   "difficulty": "hard",
   "level": 9,
+  "description": "碎拍、内外交叉双押与八段持续声部叠加，保留可完成的四键手型切换。",
   "notes": [
     { "id": "ma-h-001", "time": 2.353, "lane": 0, "type": "tap" },
     { "id": "ma-h-002", "time": 2.647, "lane": 1, "type": "tap" },
@@ -38,7 +39,13 @@
     { "id": "ma-h-026", "time": 13.235, "lane": 2, "type": "tap" },
     { "id": "ma-h-027", "time": 13.529, "lane": 3, "type": "tap" },
     { "id": "ma-h-028", "time": 13.824, "lane": 0, "type": "tap" },
-    { "id": "ma-h-029", "time": 14.706, "lane": 0, "type": "tap" },
+    {
+      "id": "ma-h-029",
+      "time": 14.706,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.588
+    },
     { "id": "ma-h-030", "time": 14.706, "lane": 2, "type": "tap" },
     { "id": "ma-h-031", "time": 15.294, "lane": 1, "type": "tap" },
     { "id": "ma-h-032", "time": 15.588, "lane": 3, "type": "tap" },
@@ -86,7 +93,13 @@
     { "id": "ma-h-062", "time": 29.118, "lane": 3, "type": "tap" },
     { "id": "ma-h-063", "time": 29.412, "lane": 1, "type": "tap" },
     { "id": "ma-h-064", "time": 29.706, "lane": 0, "type": "tap" },
-    { "id": "ma-h-065", "time": 30.588, "lane": 0, "type": "tap" },
+    {
+      "id": "ma-h-065",
+      "time": 30.588,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.588
+    },
     { "id": "ma-h-066", "time": 30.588, "lane": 2, "type": "tap" },
     { "id": "ma-h-067", "time": 31.176, "lane": 3, "type": "tap" },
     { "id": "ma-h-068", "time": 31.471, "lane": 1, "type": "tap" },
@@ -130,7 +143,13 @@
     { "id": "ma-h-094", "time": 42.941, "lane": 3, "type": "tap" },
     { "id": "ma-h-095", "time": 43.529, "lane": 0, "type": "tap" },
     { "id": "ma-h-096", "time": 43.824, "lane": 2, "type": "tap" },
-    { "id": "ma-h-097", "time": 44.706, "lane": 0, "type": "tap" },
+    {
+      "id": "ma-h-097",
+      "time": 44.706,
+      "lane": 0,
+      "type": "hold",
+      "duration": 0.588
+    },
     { "id": "ma-h-098", "time": 45.0, "lane": 1, "type": "tap" },
     { "id": "ma-h-099", "time": 45.294, "lane": 2, "type": "tap" },
     { "id": "ma-h-100", "time": 45.588, "lane": 3, "type": "tap" },

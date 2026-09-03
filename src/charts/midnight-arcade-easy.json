@@ -3,6 +3,7 @@
   "songId": "midnight-arcade",
   "difficulty": "easy",
   "level": 3,
+  "description": "沿夜行低鼓学习稳定主拍与跨手单键，三段短 Hold 对齐和声呼吸。",
   "notes": [
     { "id": "ma-e-001", "time": 2.353, "lane": 0, "type": "tap" },
     { "id": "ma-e-002", "time": 3.529, "lane": 1, "type": "tap" },
@@ -25,8 +26,7 @@
       "id": "ma-e-012",
       "time": 15.294,
       "lane": 3,
-      "type": "hold",
-      "duration": 0.882
+      "type": "tap"
     },
     { "id": "ma-e-013", "time": 16.471, "lane": 2, "type": "tap" },
     { "id": "ma-e-014", "time": 17.647, "lane": 1, "type": "tap" },
@@ -37,7 +37,7 @@
     {
       "id": "ma-e-019",
       "time": 23.529,
-      "lane": 1,
+      "lane": 2,
       "type": "hold",
       "duration": 1.176
     },
@@ -52,8 +52,7 @@
       "id": "ma-e-027",
       "time": 32.941,
       "lane": 3,
-      "type": "hold",
-      "duration": 0.882
+      "type": "tap"
     },
     { "id": "ma-e-028", "time": 34.118, "lane": 1, "type": "tap" },
     { "id": "ma-e-029", "time": 35.294, "lane": 0, "type": "tap" },
@@ -65,7 +64,7 @@
     {
       "id": "ma-e-035",
       "time": 42.353,
-      "lane": 1,
+      "lane": 0,
       "type": "hold",
       "duration": 1.176
     },

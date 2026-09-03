@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadBuiltInChart } from "../charts";
+import { loadBuiltInChart, SONG_CATALOG } from "../charts";
 import { createSongSchedulerState, takeScheduleWindow } from "./scheduler";
 
 describe("音频短窗口预调度", () => {
@@ -21,5 +21,22 @@ describe("音频短窗口预调度", () => {
       noteIndices: [],
       scheduleOutro: false,
     });
+  });
+
+  it("六张谱面的每个音符都会进入一次合成音乐调度", () => {
+    for (const song of SONG_CATALOG) {
+      for (const difficulty of ["easy", "normal", "hard"] as const) {
+        const result = loadBuiltInChart(song.id, difficulty);
+        if (!result.ok) throw new Error(result.errors.join("\n"));
+        const state = createSongSchedulerState();
+        const scheduled: number[] = [];
+        for (let horizon = 0; horizon <= song.duration + 0.5; horizon += 0.45) {
+          scheduled.push(
+            ...takeScheduleWindow(state, result.chart, horizon).noteIndices,
+          );
+        }
+        expect(scheduled).toEqual(result.chart.notes.map((_, index) => index));
+      }
+    }
   });
 });

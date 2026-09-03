@@ -40,6 +40,10 @@ export function parseChart(
     ? (input.difficulty as DifficultyId)
     : null;
   const level = isFiniteNumber(input.level) ? input.level : Number.NaN;
+  const description =
+    typeof input.description === "string" && input.description.trim()
+      ? input.description.trim()
+      : "";
 
   if (!id) errors.push("谱面缺少有效的 id。");
   if (songId !== song.id) errors.push(`谱面的 songId 必须是 “${song.id}”。`);
@@ -47,6 +51,7 @@ export function parseChart(
   if (!Number.isInteger(level) || level < 1 || level > 99) {
     errors.push("level 必须是 1 到 99 之间的整数。");
   }
+  if (!description) errors.push("谱面缺少简洁的 description。");
   if (!Array.isArray(input.notes)) errors.push("notes 必须是数组。");
 
   const notes: ChartNote[] = [];
@@ -150,6 +155,11 @@ export function parseChart(
     for (let index = 0; index < laneNotes.length - 1; index += 1) {
       const note = laneNotes[index];
       const next = laneNotes[index + 1];
+      if (Math.abs(next.time - note.time) < 0.001) {
+        errors.push(
+          `轨道 ${note.lane + 1} 的音符 “${note.id}” 与 “${next.id}” 同时出现，单次输入无法完成。`,
+        );
+      }
       if (
         note.type === "hold" &&
         next.time < note.time + note.duration - 0.001
@@ -168,6 +178,7 @@ export function parseChart(
     songId,
     difficulty,
     level,
+    description,
     notes: sortedNotes,
   };
 

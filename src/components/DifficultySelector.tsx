@@ -4,17 +4,20 @@ import {
   type DifficultyId,
 } from "../game/types";
 
-const meta: Record<DifficultyId, { label: string; hint: string }> = {
-  easy: { label: "EASY", hint: "入门节奏" },
-  normal: { label: "NORMAL", hint: "标准脉冲" },
-  hard: { label: "HARD", hint: "高速三连" },
+const meta: Record<DifficultyId, { label: string }> = {
+  easy: { label: "EASY" },
+  normal: { label: "NORMAL" },
+  hard: { label: "HARD" },
 };
 
 interface DifficultySelectorProps {
   value: DifficultyId;
   disabled?: boolean;
   levels: Record<DifficultyId, number | null>;
-  details?: Record<DifficultyId, (ChartSummary & { bestScore: number }) | null>;
+  details?: Record<
+    DifficultyId,
+    (ChartSummary & { bestScore: number; description: string }) | null
+  >;
   onChange: (difficulty: DifficultyId) => void;
 }
 
@@ -25,40 +28,40 @@ export function DifficultySelector({
   details,
   onChange,
 }: DifficultySelectorProps) {
+  const selected = details?.[value] ?? null;
   return (
-    <div
-      className="difficulty-selector"
-      role="radiogroup"
-      aria-label="选择谱面难度"
-    >
-      {DIFFICULTIES.map((difficulty) => (
-        <button
-          type="button"
-          role="radio"
-          aria-checked={value === difficulty}
-          className={value === difficulty ? "is-selected" : ""}
-          disabled={disabled || levels[difficulty] === null}
-          onClick={() => onChange(difficulty)}
-          key={difficulty}
-        >
-          <span>{meta[difficulty].label}</span>
-          <b>LV.{levels[difficulty] ?? "--"}</b>
-          <small>{meta[difficulty].hint}</small>
-          {details?.[difficulty] && (
-            <small className="difficulty-counts">
-              {details[difficulty]?.noteCount} 音符 ·{" "}
-              {details[difficulty]?.tapCount} Tap /{" "}
-              {details[difficulty]?.holdCount} Hold
-            </small>
-          )}
-          {details?.[difficulty] && (
-            <small className="difficulty-best">
-              BEST{" "}
-              {String(details[difficulty]?.bestScore ?? 0).padStart(7, "0")}
-            </small>
-          )}
-        </button>
-      ))}
-    </div>
+    <section className="difficulty-picker" aria-label="谱面难度">
+      <div
+        className="difficulty-selector"
+        role="radiogroup"
+        aria-label="选择谱面难度"
+      >
+        {DIFFICULTIES.map((difficulty) => (
+          <button
+            type="button"
+            role="radio"
+            aria-checked={value === difficulty}
+            className={value === difficulty ? "is-selected" : ""}
+            disabled={disabled || levels[difficulty] === null}
+            onClick={() => onChange(difficulty)}
+            key={difficulty}
+          >
+            <span>{meta[difficulty].label}</span>
+            <b>LV.{levels[difficulty] ?? "--"}</b>
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="difficulty-detail" aria-live="polite">
+          <p>{selected.description}</p>
+          <div>
+            <span>{selected.noteCount} 音符</span>
+            <span>{selected.tapCount} Tap</span>
+            <span>{selected.holdCount} Hold</span>
+            <span>BEST {String(selected.bestScore).padStart(7, "0")}</span>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

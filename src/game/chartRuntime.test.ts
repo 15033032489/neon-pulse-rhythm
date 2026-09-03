@@ -7,6 +7,7 @@ const makeChart = (notes: ChartNote[]): LoadedChart => ({
   songId: "test",
   difficulty: "normal",
   level: 1,
+  description: "运行时测试谱面",
   notes,
   noteCount: notes.length,
   song: {

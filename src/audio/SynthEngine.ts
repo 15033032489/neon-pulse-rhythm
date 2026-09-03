@@ -10,6 +10,7 @@ import type { Lane, LoadedChart } from "../game/types";
 interface ActiveSchedule {
   chart: LoadedChart;
   startTime: number;
+  endSongTime: number;
   cursor: SongSchedulerState;
 }
 
@@ -293,7 +294,12 @@ export class SynthEngine {
     this.stopAll();
     if (context.state !== "running") await context.resume();
     const startTime = context.currentTime + countdownSeconds + 0.12;
-    this.schedule = { chart, startTime, cursor: createSongSchedulerState() };
+    this.schedule = {
+      chart,
+      startTime,
+      endSongTime: chart.song.duration,
+      cursor: createSongSchedulerState(),
+    };
     this.scheduleCountdown(startTime);
     this.pumpScheduler();
     return startTime;
@@ -303,8 +309,10 @@ export class SynthEngine {
     const context = this.context;
     const schedule = this.schedule;
     if (!context || !schedule || context.state !== "running") return;
-    const horizonSongTime =
-      context.currentTime + horizonSeconds - schedule.startTime;
+    const horizonSongTime = Math.min(
+      schedule.endSongTime,
+      context.currentTime + horizonSeconds - schedule.startTime,
+    );
     if (horizonSongTime < 0) return;
     const window = takeScheduleWindow(
       schedule.cursor,
@@ -322,6 +330,44 @@ export class SynthEngine {
       this.schedulePad(when, 110, beatDuration * 1.45);
       this.scheduleTone(when, 880, beatDuration * 1.2, 0.06);
     }
+  }
+
+  async startPreview(
+    chart: LoadedChart,
+    durationSeconds = 10,
+  ): Promise<number> {
+    const context = this.ensureContext();
+    this.stopAll();
+    if (context.state !== "running") await context.resume();
+    const startTime = context.currentTime + 0.08;
+    this.schedule = {
+      chart,
+      startTime,
+      endSongTime: Math.min(chart.song.duration, durationSeconds),
+      cursor: createSongSchedulerState(),
+    };
+    this.pumpScheduler();
+    return startTime + this.schedule.endSongTime;
+  }
+
+  async playTutorialPulse(step: number): Promise<number> {
+    const context = this.ensureContext();
+    this.stopAll();
+    if (context.state !== "running") await context.resume();
+    const first = context.currentTime + 0.12;
+    const interval = step === 2 ? 0.62 : 0.5;
+    for (let index = 0; index < 4; index += 1) {
+      const when = first + index * interval;
+      this.scheduleTone(
+        when,
+        index === 0 ? 1174.66 : 784,
+        step === 2 && index === 1 ? 0.42 : 0.075,
+        index === 0 ? 0.18 : 0.12,
+        step === 2 && index === 1 ? "triangle" : "square",
+      );
+      if (index % 2 === 0) this.scheduleKick(when, index === 0);
+    }
+    return first + interval * 3 + 0.55;
   }
 
   setVolumes(settings: GameSettings): void {
@@ -452,6 +498,10 @@ export class SynthEngine {
 
   getBaseLatencyMs(): number {
     return (this.context?.baseLatency ?? 0) * 1000;
+  }
+
+  getActiveSourceCount(): number {
+    return this.sources.size;
   }
 
   dispose(): void {

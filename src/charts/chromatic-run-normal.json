@@ -3,6 +3,7 @@
   "songId": "chromatic-run",
   "difficulty": "normal",
   "level": 6,
+  "description": "围绕合成器琶音展开左右交替、双押与切分，Hold 长度随乐句变化。",
   "notes": [
     {
       "id": "n001",
@@ -194,7 +195,7 @@
     {
       "id": "n032",
       "time": 8.4375,
-      "lane": 0,
+      "lane": 3,
       "type": "hold",
       "duration": 0.46875
     },
@@ -297,7 +298,7 @@
     {
       "id": "n049",
       "time": 12.1875,
-      "lane": 0,
+      "lane": 1,
       "type": "hold",
       "duration": 0.46875
     },
@@ -406,7 +407,7 @@
     {
       "id": "n067",
       "time": 15.9375,
-      "lane": 0,
+      "lane": 3,
       "type": "hold",
       "duration": 0.46875
     },

@@ -3,6 +3,7 @@
   "songId": "chromatic-run",
   "difficulty": "easy",
   "level": 3,
+  "description": "跟随明亮主拍练习单键换手，并用两段短 Hold 认识持续输入。",
   "notes": [
     {
       "id": "e001",
@@ -105,8 +106,7 @@
       "id": "e017",
       "time": 9.375,
       "lane": 0,
-      "type": "hold",
-      "duration": 0.703125
+      "type": "tap"
     },
     {
       "id": "e018",
@@ -154,8 +154,7 @@
       "id": "e025",
       "time": 13.125,
       "lane": 0,
-      "type": "hold",
-      "duration": 0.703125
+      "type": "tap"
     },
     {
       "id": "e026",
@@ -203,8 +202,7 @@
       "id": "e033",
       "time": 16.875,
       "lane": 0,
-      "type": "hold",
-      "duration": 0.703125
+      "type": "tap"
     },
     {
       "id": "e034",
@@ -251,7 +249,7 @@
     {
       "id": "e041",
       "time": 20.625,
-      "lane": 0,
+      "lane": 3,
       "type": "hold",
       "duration": 0.703125
     },
