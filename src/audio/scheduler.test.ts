@@ -23,7 +23,7 @@ describe("音频短窗口预调度", () => {
     });
   });
 
-  it("六张谱面的每个音符都会进入一次合成音乐调度", () => {
+  it("所有谱面的每个音符都会进入一次合成音乐调度", () => {
     for (const song of SONG_CATALOG) {
       for (const difficulty of ["easy", "normal", "hard"] as const) {
         const result = loadBuiltInChart(song.id, difficulty);
@@ -40,3 +40,4 @@ describe("音频短窗口预调度", () => {
     }
   });
 });
+

@@ -14,6 +14,7 @@ const makeChart = (notes: ChartNote[]): LoadedChart => ({
     id: "test",
     title: "Test",
     artist: "Test",
+    category: "original",
     bpm: 120,
     duration: 10,
     subtitle: "Test",
@@ -114,3 +115,4 @@ describe("Hold 状态机", () => {
     });
   });
 });
+

@@ -11,6 +11,18 @@ describe("谱面解析和校验", () => {
     ["midnight-arcade", "easy", 40, 3],
     ["midnight-arcade", "normal", 80, 6],
     ["midnight-arcade", "hard", 108, 8],
+    ["beethoven-5-op67", "easy", 132, 3],
+    ["beethoven-5-op67", "normal", 274, 5],
+    ["beethoven-5-op67", "hard", 520, 6],
+    ["mozart-40-k550", "easy", 148, 4],
+    ["mozart-40-k550", "normal", 300, 6],
+    ["mozart-40-k550", "hard", 597, 7],
+    ["dvorak-9-op95", "easy", 101, 3],
+    ["dvorak-9-op95", "normal", 246, 5],
+    ["dvorak-9-op95", "hard", 492, 6],
+    ["beethoven-9-op125", "easy", 120, 3],
+    ["beethoven-9-op125", "normal", 265, 5],
+    ["beethoven-9-op125", "hard", 524, 6],
   ] as const)(
     "加载、排序并索引 %s %s 谱面",
     (songId, difficulty, noteCount, holdCount) => {
@@ -37,7 +49,7 @@ describe("谱面解析和校验", () => {
     },
   );
 
-  it("六张谱面拥有独立描述和非模板化 Hold 数量", () => {
+  it("所有谱面拥有独立描述并按曲目设计不同 Hold 数量", () => {
     const charts = SONG_CATALOG.flatMap((song) =>
       (["easy", "normal", "hard"] as const).map((difficulty) => {
         const result = loadBuiltInChart(song.id, difficulty);
@@ -45,7 +57,9 @@ describe("谱面解析和校验", () => {
         return result.chart;
       }),
     );
-    expect(new Set(charts.map((chart) => chart.description)).size).toBe(6);
+    expect(new Set(charts.map((chart) => chart.description)).size).toBe(
+      charts.length,
+    );
     expect(
       new Set(
         charts.map(
@@ -53,6 +67,24 @@ describe("谱面解析和校验", () => {
         ),
       ).size,
     ).toBeGreaterThan(2);
+  });
+
+  it("歌曲 ID 唯一且经典交响元数据完整", () => {
+    expect(new Set(SONG_CATALOG.map((song) => song.id)).size).toBe(
+      SONG_CATALOG.length,
+    );
+    const classical = SONG_CATALOG.filter(
+      (song) => song.category === "classical",
+    );
+    expect(classical).toHaveLength(4);
+    for (const song of classical) {
+      expect(song.duration).toBeGreaterThanOrEqual(60);
+      expect(song.duration).toBeLessThanOrEqual(90);
+      expect(song.englishTitle).toBeTruthy();
+      expect(song.movement).toBeTruthy();
+      expect(song.workNumber).toBeTruthy();
+      expect(song.licenseLabel).toBe("公版作品 · 本站原创合成改编");
+    }
   });
 
   it("自动排序并给出提示", () => {
@@ -121,3 +153,4 @@ describe("谱面解析和校验", () => {
     expect(result.errors.join("\n")).toMatch(/同时出现/);
   });
 });
+

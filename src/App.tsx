@@ -81,6 +81,7 @@ import {
   type DifficultyId,
   type Lane,
   type LoadedChart,
+  type SongCategory,
 } from "./game/types";
 
 type GamePhase =
@@ -189,10 +190,14 @@ const blocksGameplayInput = (target: EventTarget | null) =>
   );
 
 export default function App() {
+  const [songCategory, setSongCategory] = useState<SongCategory>("original");
   const [menuSongId, setMenuSongId] = useState(SONG_CATALOG[0].id);
   const [menuDifficulty, setMenuDifficulty] = useState<DifficultyId>("normal");
   const selectedSong =
     SONG_CATALOG.find((song) => song.id === menuSongId) ?? SONG_CATALOG[0];
+  const visibleSongs = SONG_CATALOG.filter(
+    (song) => song.category === songCategory,
+  );
   const chartResults = BUILT_IN_CHART_RESULTS[menuSongId];
   const chartResult = chartResults[menuDifficulty];
   const chart = chartResult.ok ? chartResult.chart : null;
@@ -1884,20 +1889,32 @@ export default function App() {
             {phase === "idle" && (
               <div className="game-overlay intro-overlay upgraded-intro">
                 <div className="intro-kicker">
-                  <i /> ORIGINAL SYNTH TRACK
+                  <i />
+                  {selectedSong.category === "classical"
+                    ? "PUBLIC DOMAIN · ORIGINAL SYNTH ARRANGEMENT"
+                    : "ORIGINAL SYNTH TRACK"}
                 </div>
                 <h2>
-                  {selectedSong.title.split(" ")[0].toUpperCase()}
+                  {selectedSong.category === "classical"
+                    ? selectedSong.title
+                    : selectedSong.title.split(" ")[0].toUpperCase()}
                   <br />
                   <em>
-                    {selectedSong.title
-                      .split(" ")
-                      .slice(1)
-                      .join(" ")
-                      .toUpperCase()}
+                    {selectedSong.category === "classical"
+                      ? selectedSong.englishTitle
+                      : selectedSong.title
+                          .split(" ")
+                          .slice(1)
+                          .join(" ")
+                          .toUpperCase()}
                   </em>
                 </h2>
                 <p>{selectedSong.subtitle}</p>
+                {selectedSong.licenseLabel && (
+                  <span className="public-domain-badge">
+                    {selectedSong.licenseLabel}
+                  </span>
+                )}
                 {chart && (
                   <div className="intro-specs">
                     <span>
@@ -2030,8 +2047,40 @@ export default function App() {
           </div>
 
           <div className="control-primary">
+            <div
+              className="song-category-filter"
+              role="tablist"
+              aria-label="曲目分类"
+            >
+              {(
+                [
+                  ["original", "原创电子"],
+                  ["classical", "经典交响"],
+                ] as const
+              ).map(([category, label]) => (
+                <button
+                  key={category}
+                  type="button"
+                  role="tab"
+                  aria-selected={songCategory === category}
+                  className={songCategory === category ? "is-active" : ""}
+                  disabled={isSettingsLocked}
+                  onClick={() => {
+                    if (songCategory === category) return;
+                    stopSongPreview();
+                    setSongCategory(category);
+                    const firstSong = SONG_CATALOG.find(
+                      (song) => song.category === category,
+                    );
+                    if (firstSong) setMenuSongId(firstSong.id);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="song-selector" aria-label="选择歌曲">
-              {SONG_CATALOG.map((song, index) => (
+              {visibleSongs.map((song) => (
                 <div
                   className={`song-option ${song.id === menuSongId ? "is-selected" : ""}`}
                   key={song.id}
@@ -2055,12 +2104,33 @@ export default function App() {
                       <i />
                     </span>
                     <span className="song-copy">
-                      <small>TRACK {String(index + 1).padStart(2, "0")}</small>
+                      <small>
+                        TRACK{" "}
+                        {String(SONG_CATALOG.indexOf(song) + 1).padStart(
+                          2,
+                          "0",
+                        )}
+                      </small>
                       <b>{song.title}</b>
+                      {song.englishTitle && (
+                        <span className="song-english-title">
+                          {song.englishTitle}
+                        </span>
+                      )}
                       <em>{song.artist}</em>
                       <span className="song-meta">
                         {song.bpm} BPM · {formatClockTime(song.duration)}
                       </span>
+                      {song.movement && (
+                        <span className="song-work-meta">
+                          {song.movement} · {song.workNumber}
+                        </span>
+                      )}
+                      {song.licenseLabel && (
+                        <span className="song-license-tag">
+                          {song.licenseLabel}
+                        </span>
+                      )}
                     </span>
                   </button>
                   <button
@@ -2521,3 +2591,4 @@ export default function App() {
     </main>
   );
 }
+

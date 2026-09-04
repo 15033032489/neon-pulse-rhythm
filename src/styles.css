@@ -3067,6 +3067,158 @@ h1 em {
   }
 }
 
+/* Classical collection */
+.song-category-filter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.song-category-filter button {
+  min-height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  color: #a8a5bc;
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.song-category-filter button.is-active {
+  border-color: rgba(67, 239, 255, 0.42);
+  color: #f4fdff;
+  background: linear-gradient(
+    135deg,
+    rgba(67, 239, 255, 0.14),
+    rgba(149, 103, 255, 0.11)
+  );
+  box-shadow: inset 0 0 18px rgba(67, 239, 255, 0.06);
+}
+
+.song-selector {
+  display: flex;
+  gap: 8px;
+  padding: 1px 1px 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(67, 239, 255, 0.35) transparent;
+}
+
+.song-option {
+  flex: 0 0 calc(100% - 2px);
+  min-width: 0;
+  scroll-snap-align: start;
+}
+
+.song-copy {
+  min-width: 0;
+}
+
+.song-copy b,
+.song-english-title,
+.song-work-meta,
+.song-license-tag {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-english-title {
+  margin-top: 1px;
+  color: #d8d5ea;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.song-work-meta {
+  margin-top: 3px;
+  color: #aaa7bd;
+  font-size: 11px;
+}
+
+.song-license-tag,
+.public-domain-badge {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid rgba(255, 204, 91, 0.28);
+  border-radius: 999px;
+  color: #ffe4a0;
+  background: rgba(255, 190, 64, 0.08);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.song-license-tag {
+  margin-top: 5px;
+  padding: 3px 6px;
+}
+
+.public-domain-badge {
+  display: inline-flex;
+  margin: 0 auto 12px;
+  padding: 5px 10px;
+}
+
+.song-art.art-gold {
+  --song-accent: #ffc85a;
+  background: linear-gradient(145deg, #271805, #10111e);
+}
+
+.song-art.art-rose {
+  --song-accent: #ff7da9;
+  background: linear-gradient(145deg, #260b1b, #11111f);
+}
+
+.song-art.art-ember {
+  --song-accent: #ff744f;
+  background: linear-gradient(145deg, #2b0d08, #111019);
+}
+
+.song-art.art-azure {
+  --song-accent: #71a7ff;
+  background: linear-gradient(145deg, #071a31, #10101e);
+}
+
+.song-art.art-gold i,
+.song-art.art-rose i,
+.song-art.art-ember i,
+.song-art.art-azure i {
+  background: var(--song-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--song-accent) 70%, transparent);
+}
+
+.upgraded-intro h2 em {
+  font-size: 0.42em;
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 920px) {
+  .song-selector {
+    scroll-padding-inline: 1px;
+  }
+}
+
+@media (max-width: 620px) {
+  .song-category-filter button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+
+  .song-work-meta,
+  .song-license-tag {
+    font-size: 12px;
+  }
+
+  .upgraded-intro h2 em {
+    font-size: 0.38em;
+  }
+}
+
 /* Upgrade: charts, holds, calibration, records, and focused play layout. */
 .runtime-error.is-info {
   border-color: rgba(67, 239, 255, 0.3);
@@ -4638,3 +4790,20 @@ body.dialog-lock {
     transition: none !important;
   }
 }
+
+/* Keep the collection carousel after all legacy product-shell rules. */
+.control-card .song-selector {
+  display: flex;
+  grid-template-columns: none;
+  gap: 8px;
+  padding: 1px 1px 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+}
+
+.control-card .song-selector .song-option {
+  flex: 0 0 calc(100% - 2px);
+  scroll-snap-align: start;
+}
+

@@ -1,6 +1,6 @@
 # Neon Pulse
 
-Neon Pulse 是一款可直接在浏览器运行的四键下落式音乐节奏游戏。项目使用 React、TypeScript、Vite、Web Audio API 和 Vitest；内置 `Chromatic Run` 与 `Midnight Arcade` 两首原创合成曲，不加载外部歌曲、图片或字体。
+Neon Pulse 是一款可直接在浏览器运行的四键下落式音乐节奏游戏。项目使用 React、TypeScript、Vite、Web Audio API 和 Vitest；内置 `Chromatic Run` 与 `Midnight Arcade` 两首原创电子曲，以及四首经典交响主题的原创合成改编，不加载外部歌曲、图片或字体。
 
 ## 安装与运行
 
@@ -59,7 +59,7 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 
 ## 添加原创歌曲
 
-1. 在 `src/songs/catalog.ts` 增加歌曲元数据。`id` 必须唯一，`duration` 以秒为单位；`synthProfile` 选择现有的 `chromatic` 或 `night-drive`，也可以按第 3 步新增合成风格。
+1. 在 `src/songs/catalog.ts` 增加歌曲元数据。`id` 必须唯一，`duration` 以秒为单位；`category` 选择 `original` 或 `classical`，`synthProfile` 选择现有合成风格，也可以按第 3 步新增。
 2. 为每个难度在 `src/charts/` 创建独立 JSON，并在 `src/charts/index.ts` 注册。格式如下：
 
 ```json
@@ -86,4 +86,16 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 
 3. 如需不同编曲，在 `SynthEngine` 中按 `synthProfile` 添加新的原创合成调度器，继续使用同一绝对 `AudioContext` 时间与短窗口游标。
 
-内置 `Chromatic Run`、`Midnight Arcade` 及全部谱面为本项目的程序化原创内容，无需密钥或外部版权资源。
+内置 `Chromatic Run`、`Midnight Arcade` 及其谱面为本项目的程序化原创内容，无需密钥或外部版权资源。
+
+## 经典交响曲目与音乐许可
+
+“经典交响”分类只使用已进入公版的作品主题。本项目没有下载、打包或播放商业录音、流媒体音频、人声采样或第三方 MIDI；旋律轮廓依据下列公版总谱人工编码，并以 Web Audio 振荡器、包络、滤波、立体声声像、算法混响和程序化定音鼓重新编配。页面统一标注“公版作品 · 本站原创合成改编”，音频实现和谱面数据属于本项目自己的程序化改编。
+
+- 贝多芬《第五交响曲》第一乐章，作品 67：72 秒，108 BPM。参考 [IMSLP 公版总谱索引](https://imslp.org/wiki/Symphony_No.5_%28Beethoven%2C_Ludwig_van%29)。
+- 莫扎特《第四十交响曲》第一乐章，K.550：68 秒，132 BPM。参考 [IMSLP 公版总谱索引](https://imslp.org/wiki/Symphony_No.40_%28Mozart%2C_Wolfgang_Amadeus%29)。
+- 德沃夏克《第九交响曲“自新大陆”》第四乐章，作品 95：80 秒，96 BPM。参考 [IMSLP 公版总谱索引](https://imslp.org/wiki/Symphony_No.9%2C_Op.95_%28Dvo%C5%99%C3%A1k%2C_Anton%C3%ADn%29)。
+- 贝多芬《第九交响曲》第四乐章“欢乐颂”主题，作品 125：78 秒，100 BPM。参考 [IMSLP 公版总谱索引](https://imslp.org/wiki/Ludwig_van_Beethoven%3A_Symphony_No.9%2C_Op.125_%28Beethoven%2C_Ludwig_van%29)。本改编不使用人声。
+
+IMSLP 各文件可能带有地区性公版提示；本项目只参考作品本身及页面中标记为 Public Domain 的历史总谱，不再分发原始扫描文件。`scripts/generate-classical-charts.mjs` 保存四首曲目的节奏网格与谱面编排规则，可重新生成 12 个 JSON 谱面；生成后的 JSON 仍会经过与手写谱面相同的排序、轨道、Hold 重叠和歌曲边界校验。
+

@@ -4,6 +4,14 @@ export const DIFFICULTIES = ["easy", "normal", "hard"] as const;
 export type Lane = 0 | 1 | 2 | 3;
 export type DifficultyId = (typeof DIFFICULTIES)[number];
 export type NoteType = "tap" | "hold";
+export type SongCategory = "original" | "classical";
+export type SynthProfile =
+  | "chromatic"
+  | "night-drive"
+  | "beethoven-5"
+  | "mozart-40"
+  | "new-world"
+  | "ode-to-joy";
 
 interface BaseChartNote {
   id: string;
@@ -34,12 +42,17 @@ export interface ChartDefinition {
 export interface SongDefinition {
   id: string;
   title: string;
+  englishTitle?: string;
   artist: string;
+  category: SongCategory;
   bpm: number;
   duration: number;
   subtitle: string;
-  synthProfile: "chromatic" | "night-drive";
-  accent: "cyan" | "violet";
+  movement?: string;
+  workNumber?: string;
+  licenseLabel?: string;
+  synthProfile: SynthProfile;
+  accent: "cyan" | "violet" | "gold" | "rose" | "ember" | "azure";
 }
 
 export interface LoadedChart extends ChartDefinition {
@@ -87,3 +100,4 @@ export function summarizeChart(chart: LoadedChart): ChartSummary {
     maxScoreUnits: chart.totalScoringUnits,
   };
 }
+

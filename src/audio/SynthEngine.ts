@@ -22,6 +22,7 @@ export interface CalibrationClock {
 }
 
 type AudioBus = "music" | "hit";
+type OrchestraInstrument = "strings" | "brass" | "woodwind" | "bass";
 
 export class SynthEngine {
   private context: AudioContext | null = null;
@@ -33,6 +34,19 @@ export class SynthEngine {
   private schedule: ActiveSchedule | null = null;
   private settings: GameSettings | null = null;
 
+  private createReverbImpulse(context: AudioContext): AudioBuffer {
+    const length = Math.ceil(context.sampleRate * 1.35);
+    const impulse = context.createBuffer(2, length, context.sampleRate);
+    for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+      const data = impulse.getChannelData(channel);
+      for (let index = 0; index < length; index += 1) {
+        const decay = (1 - index / length) ** 2.35;
+        data[index] = (Math.random() * 2 - 1) * decay * 0.52;
+      }
+    }
+    return impulse;
+  }
+
   private ensureContext(): AudioContext {
     if (this.context) return this.context;
 
@@ -41,13 +55,20 @@ export class SynthEngine {
     const music = context.createGain();
     const hit = context.createGain();
     const compressor = context.createDynamicsCompressor();
+    const reverb = context.createConvolver();
+    const reverbGain = context.createGain();
 
     compressor.threshold.value = -16;
     compressor.knee.value = 18;
     compressor.ratio.value = 5;
     compressor.attack.value = 0.004;
     compressor.release.value = 0.18;
+    reverb.buffer = this.createReverbImpulse(context);
+    reverbGain.gain.value = 0.16;
     music.connect(master);
+    music.connect(reverb);
+    reverb.connect(reverbGain);
+    reverbGain.connect(master);
     hit.connect(master);
     master.connect(compressor);
     compressor.connect(context.destination);
@@ -202,6 +223,239 @@ export class SynthEngine {
     }
   }
 
+  private scheduleOrchestraTone(
+    when: number,
+    frequency: number,
+    duration: number,
+    volume: number,
+    instrument: OrchestraInstrument,
+    pan = 0,
+  ): void {
+    const context = this.context;
+    const destination = this.music;
+    if (!context || !destination) return;
+    const start = Math.max(when, context.currentTime + 0.001);
+    const release = start + Math.max(0.06, duration);
+    const gain = context.createGain();
+    const filter = context.createBiquadFilter();
+    const panner = context.createStereoPanner();
+    const settings = {
+      strings: { types: ["sawtooth", "triangle"], cutoff: 2100, attack: 0.018 },
+      brass: { types: ["sawtooth", "square"], cutoff: 1450, attack: 0.012 },
+      woodwind: { types: ["sine", "triangle"], cutoff: 2800, attack: 0.026 },
+      bass: { types: ["triangle", "sawtooth"], cutoff: 720, attack: 0.016 },
+    }[instrument] as {
+      types: OscillatorType[];
+      cutoff: number;
+      attack: number;
+    };
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(settings.cutoff * 0.72, start);
+    filter.frequency.linearRampToValueAtTime(settings.cutoff, start + 0.06);
+    filter.Q.value = instrument === "brass" ? 1.1 : 0.55;
+    panner.pan.value = Math.max(-0.8, Math.min(0.8, pan));
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(
+      Math.max(0.0002, volume),
+      start + settings.attack,
+    );
+    gain.gain.setValueAtTime(
+      Math.max(0.0002, volume * 0.72),
+      Math.max(start + settings.attack + 0.01, release - 0.055),
+    );
+    gain.gain.exponentialRampToValueAtTime(0.0001, release);
+    filter.connect(panner);
+    panner.connect(gain);
+    gain.connect(destination);
+    settings.types.forEach((type, index) => {
+      const oscillator = this.track(context.createOscillator());
+      oscillator.type = type;
+      oscillator.frequency.setValueAtTime(frequency, start);
+      oscillator.detune.value = index === 0 ? -5 : 6;
+      oscillator.connect(filter);
+      oscillator.start(start);
+      oscillator.stop(release + 0.025);
+    });
+  }
+
+  private scheduleTimpani(when: number, accent = false): void {
+    const context = this.context;
+    const destination = this.music;
+    if (!context || !destination) return;
+    const start = Math.max(when, context.currentTime + 0.001);
+    const oscillator = this.track(context.createOscillator());
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(accent ? 118 : 98, start);
+    oscillator.frequency.exponentialRampToValueAtTime(58, start + 0.22);
+    gain.gain.setValueAtTime(accent ? 0.34 : 0.22, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.46);
+    oscillator.connect(gain);
+    gain.connect(destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.48);
+    this.scheduleNoise(start, 0.085, accent ? 0.075 : 0.045, 720);
+  }
+
+  private scheduleClassicalHalfBeat(
+    schedule: ActiveSchedule,
+    halfBeat: number,
+  ): void {
+    const { chart, startTime } = schedule;
+    const beatDuration = 60 / chart.song.bpm;
+    const halfBeatDuration = beatDuration / 2;
+    const when = startTime + halfBeat * halfBeatDuration;
+    const profile = chart.song.synthProfile;
+
+    if (profile === "beethoven-5") {
+      const motif = [
+        196, 196, 196, 155.563, 174.614, 174.614, 174.614, 146.832,
+      ];
+      const index = halfBeat % motif.length;
+      const longAccent = index === 3 || index === 7;
+      this.scheduleOrchestraTone(
+        when,
+        motif[index],
+        longAccent ? beatDuration * 1.38 : beatDuration * 0.28,
+        longAccent ? 0.13 : 0.085,
+        longAccent ? "brass" : "strings",
+        index < 4 ? -0.24 : 0.24,
+      );
+      if (index === 0 || longAccent) this.scheduleTimpani(when, longAccent);
+      if (halfBeat % 4 === 0)
+        this.scheduleOrchestraTone(
+          when,
+          [65.406, 58.27, 77.782, 73.416][Math.floor(halfBeat / 8) % 4],
+          beatDuration * 1.7,
+          0.055,
+          "bass",
+          -0.18,
+        );
+      return;
+    }
+
+    if (profile === "mozart-40") {
+      const melody = [
+        391.995, 391.995, 391.995, 311.127, 349.228, 349.228, 349.228, 293.665,
+        311.127, 349.228, 391.995, 466.164, 440, 391.995, 349.228, 311.127,
+      ];
+      const baseIndex = (halfBeat * 2) % melody.length;
+      this.scheduleOrchestraTone(
+        when,
+        melody[baseIndex],
+        halfBeatDuration * 0.78,
+        0.052,
+        "strings",
+        -0.38,
+      );
+      this.scheduleOrchestraTone(
+        when + halfBeatDuration * 0.5,
+        melody[(baseIndex + 1) % melody.length],
+        halfBeatDuration * 0.72,
+        0.048,
+        "strings",
+        0.34,
+      );
+      if (halfBeat % 4 === 0)
+        this.scheduleOrchestraTone(
+          when,
+          [97.999, 87.307, 77.782, 87.307][Math.floor(halfBeat / 4) % 4],
+          beatDuration * 1.8,
+          0.038,
+          "bass",
+          -0.1,
+        );
+      if (halfBeat % 8 === 6)
+        this.scheduleOrchestraTone(
+          when,
+          melody[(baseIndex + 4) % melody.length] / 2,
+          beatDuration * 1.1,
+          0.038,
+          "woodwind",
+          0.52,
+        );
+      return;
+    }
+
+    if (profile === "new-world") {
+      const theme = [
+        164.814, 246.942, 329.628, 391.995, 369.994, 329.628, 311.127, 246.942,
+        196, 246.942, 293.665, 329.628, 246.942, 196, 164.814, 146.832,
+      ];
+      const index = halfBeat % theme.length;
+      const accent = index === 0 || index === 3 || index === 8 || index === 11;
+      this.scheduleOrchestraTone(
+        when,
+        theme[index],
+        accent ? beatDuration * 0.9 : halfBeatDuration * 0.72,
+        accent ? 0.12 : 0.064,
+        accent ? "brass" : "strings",
+        accent ? 0.08 : index % 2 ? 0.32 : -0.32,
+      );
+      if (halfBeat % 4 === 0) {
+        this.scheduleTimpani(when, halfBeat % 8 === 0);
+        this.scheduleOrchestraTone(
+          when,
+          [82.407, 73.416, 65.406, 61.735][Math.floor(halfBeat / 8) % 4],
+          beatDuration * 1.75,
+          0.072,
+          "bass",
+          -0.24,
+        );
+      }
+      return;
+    }
+
+    if (profile === "ode-to-joy") {
+      if (halfBeat % 2 !== 0) return;
+      const melody = [
+        329.628, 329.628, 349.228, 391.995, 391.995, 349.228, 329.628, 293.665,
+        261.626, 261.626, 293.665, 329.628, 329.628, 293.665, 293.665,
+      ];
+      const beatIndex = halfBeat / 2;
+      const index = beatIndex % melody.length;
+      const progress = (halfBeat * halfBeatDuration) / chart.song.duration;
+      const phraseEnd = index === 12 || index === 14;
+      this.scheduleOrchestraTone(
+        when,
+        melody[index],
+        phraseEnd ? beatDuration * 1.7 : beatDuration * 0.82,
+        0.065,
+        progress < 0.34 ? "woodwind" : "strings",
+        -0.18,
+      );
+      if (progress > 0.32)
+        this.scheduleOrchestraTone(
+          when,
+          melody[index] / 2,
+          beatDuration * 0.86,
+          0.042,
+          "strings",
+          0.3,
+        );
+      if (progress > 0.64)
+        this.scheduleOrchestraTone(
+          when,
+          melody[index] * 1.5,
+          beatDuration * 0.72,
+          0.042,
+          "brass",
+          0.06,
+        );
+      if (beatIndex % 4 === 0) {
+        this.scheduleOrchestraTone(
+          when,
+          [65.406, 73.416, 82.407, 87.307][Math.floor(beatIndex / 4) % 4],
+          beatDuration * 3.6,
+          0.045,
+          "bass",
+          -0.28,
+        );
+        if (progress > 0.55) this.scheduleTimpani(when, beatIndex % 8 === 0);
+      }
+    }
+  }
+
   private scheduleCountdown(startTime: number): void {
     for (let index = 3; index >= 1; index -= 1) {
       this.scheduleTone(
@@ -219,6 +473,10 @@ export class SynthEngine {
     const { chart, startTime } = schedule;
     const beatDuration = 60 / chart.song.bpm;
     const when = startTime + halfBeat * (beatDuration / 2);
+    if (chart.song.category === "classical") {
+      this.scheduleClassicalHalfBeat(schedule, halfBeat);
+      return;
+    }
     if (chart.song.synthProfile === "night-drive") {
       const beat = halfBeat / 2;
       const chordRoots = [73.416, 65.406, 55, 61.735] as const;
@@ -264,6 +522,7 @@ export class SynthEngine {
 
   private scheduleChartCue(schedule: ActiveSchedule, noteIndex: number): void {
     const note = schedule.chart.notes[noteIndex];
+    if (schedule.chart.song.category === "classical") return;
     const frequencies =
       schedule.chart.song.synthProfile === "night-drive"
         ? ([293.665, 369.994, 440, 554.365] as const)
@@ -374,12 +633,12 @@ export class SynthEngine {
     this.settings = settings;
     const now = this.context?.currentTime ?? 0;
     this.master?.gain.setTargetAtTime(
-      settings.muted ? 0 : settings.masterVolume,
+      settings.muted ? 0 : settings.masterVolume * 0.82,
       now,
       0.012,
     );
-    this.music?.gain.setTargetAtTime(settings.musicVolume, now, 0.012);
-    this.hit?.gain.setTargetAtTime(settings.hitVolume, now, 0.012);
+    this.music?.gain.setTargetAtTime(settings.musicVolume * 0.58, now, 0.012);
+    this.hit?.gain.setTargetAtTime(settings.hitVolume * 0.48, now, 0.012);
   }
 
   async suspend(): Promise<void> {
@@ -515,3 +774,4 @@ export class SynthEngine {
     this.noiseBuffer = null;
   }
 }
+
