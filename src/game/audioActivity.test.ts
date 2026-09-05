@@ -24,4 +24,17 @@ describe("试听、教程与校准音频互斥", () => {
     expect(controller.stop("calibration")).toBe(false);
     expect(cleanup).toHaveBeenCalledOnce();
   });
+
+  it("快速连续启动两个试听时先清理旧试听且不会叠加", () => {
+    const controller = new AudioActivityController();
+    const first = vi.fn();
+    const second = vi.fn();
+    controller.start("preview", first);
+    controller.start("preview", second);
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).not.toHaveBeenCalled();
+    expect(controller.current()).toBe("preview");
+    controller.stop("preview");
+    expect(second).toHaveBeenCalledOnce();
+  });
 });

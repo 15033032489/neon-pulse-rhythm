@@ -6,14 +6,17 @@ import {
 import type { DifficultyId, LoadedChart } from "./types";
 
 export type FinishReason = "complete" | "failed" | "abandoned";
+export type PlayMode = "standard" | "practice";
 
 export interface RunSession {
   songId: string;
   songTitle: string;
+  songEnglishTitle?: string;
   difficulty: DifficultyId;
   chart: LoadedChart;
   noteCount: number;
   maxScoreUnits: number;
+  mode: PlayMode;
 }
 
 export interface RemainingRunWork {
@@ -27,16 +30,24 @@ export interface FinalizedRun {
   shouldPersist: boolean;
 }
 
-export function createRunSession(chart: LoadedChart): RunSession {
+export function createRunSession(
+  chart: LoadedChart,
+  mode: PlayMode = "standard",
+): RunSession {
   return Object.freeze({
     songId: chart.song.id,
     songTitle: chart.song.title,
+    songEnglishTitle: chart.song.englishTitle,
     difficulty: chart.difficulty,
     chart,
     noteCount: chart.noteCount,
     maxScoreUnits: chart.totalScoringUnits,
+    mode,
   });
 }
+
+export const shouldFailRun = (life: number, mode: PlayMode): boolean =>
+  mode === "standard" && life <= 0;
 
 export function calculateSessionScore(
   stats: GameStats,
@@ -60,4 +71,11 @@ export function finalizeRun(
     reason,
     shouldPersist: true,
   };
+}
+
+export function shouldPersistRun(
+  session: RunSession,
+  finalized: FinalizedRun,
+): boolean {
+  return session.mode === "standard" && finalized.shouldPersist;
 }

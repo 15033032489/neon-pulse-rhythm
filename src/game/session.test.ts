@@ -5,6 +5,8 @@ import {
   calculateSessionScore,
   createRunSession,
   finalizeRun,
+  shouldFailRun,
+  shouldPersistRun,
 } from "./session";
 
 describe("结束和放弃", () => {
@@ -49,5 +51,22 @@ describe("结束和放弃", () => {
     expect(result.stats.judgedNotes).toBe(2);
     expect(result.stats.processedScoreUnits).toBe(3);
     expect(result.shouldPersist).toBe(true);
+  });
+
+  it("练习模式生命归零仍继续且任何结果都不保存", () => {
+    const loaded = loadBuiltInChart("chromatic-run", "easy");
+    if (!loaded.ok) throw new Error("测试谱面加载失败");
+    const practice = createRunSession(loaded.chart, "practice");
+    const finalized = finalizeRun(
+      createInitialStats(0),
+      { noteCount: 0, scoreUnits: 0 },
+      "complete",
+    );
+    expect(shouldFailRun(0, practice.mode)).toBe(false);
+    expect(shouldPersistRun(practice, finalized)).toBe(false);
+    expect(shouldFailRun(0, "standard")).toBe(true);
+    expect(
+      shouldPersistRun(createRunSession(loaded.chart, "standard"), finalized),
+    ).toBe(true);
   });
 });

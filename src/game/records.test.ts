@@ -18,6 +18,7 @@ describe("成绩记录", () => {
         maxCombo: 80,
         grade: "B",
         flags: { fc: false, ap: false },
+        cleared: true,
       },
       "2026-01-01",
     );
@@ -41,6 +42,7 @@ describe("成绩记录", () => {
       bestAccuracy: 92,
       maxCombo: 120,
       bestGrade: "A",
+      clear: true,
       fc: true,
       ap: false,
     });
@@ -80,6 +82,7 @@ describe("成绩记录", () => {
       bestAccuracy: 0,
       maxCombo: 0,
       bestGrade: "D",
+      clear: false,
       fc: false,
       ap: false,
     });

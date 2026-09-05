@@ -98,7 +98,9 @@ export function isNoteOverdue(offsetMs: number): boolean {
   return Number.isFinite(offsetMs) && offsetMs > RULESET.windowsMs.good;
 }
 
-export function createInitialStats(initialLife = RULESET.maxLife): GameStats {
+export function createInitialStats(
+  initialLife: number = RULESET.maxLife,
+): GameStats {
   return {
     rawScore: 0,
     combo: 0,

@@ -1,7 +1,7 @@
 import type { DifficultyId } from "./types";
 import type { Grade, RunFlags } from "./scoring";
 
-export const RECORDS_VERSION = 1;
+export const RECORDS_VERSION = 2;
 export const RECORDS_STORAGE_KEY = "neon-pulse:records";
 
 export interface PlayRecord {
@@ -9,6 +9,7 @@ export interface PlayRecord {
   bestAccuracy: number;
   maxCombo: number;
   bestGrade: Grade;
+  clear: boolean;
   fc: boolean;
   ap: boolean;
   updatedAt: string;
@@ -25,6 +26,7 @@ export interface RunRecordInput {
   maxCombo: number;
   grade: Grade;
   flags: RunFlags;
+  cleared?: boolean;
 }
 
 const gradeRank: Record<Grade, number> = { D: 0, C: 1, B: 2, A: 3, S: 4 };
@@ -55,6 +57,7 @@ const normalizePlayRecord = (value: unknown): PlayRecord | null => {
     bestAccuracy: Math.min(100, Math.max(0, finiteOr(value.bestAccuracy, 0))),
     maxCombo: Math.max(0, Math.round(finiteOr(value.maxCombo, 0))),
     bestGrade,
+    clear: value.clear === true,
     fc: value.fc === true,
     ap: value.ap === true,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : "",
@@ -109,6 +112,7 @@ export function mergeRecord(
       !previous || gradeRank[run.grade] > gradeRank[previous.bestGrade]
         ? run.grade
         : previous.bestGrade,
+    clear: Boolean(previous?.clear || run.cleared),
     fc: Boolean(previous?.fc || run.flags.fc),
     ap: Boolean(previous?.ap || run.flags.ap),
     updatedAt: timestamp,

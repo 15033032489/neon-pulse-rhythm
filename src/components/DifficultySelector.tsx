@@ -16,7 +16,12 @@ interface DifficultySelectorProps {
   levels: Record<DifficultyId, number | null>;
   details?: Record<
     DifficultyId,
-    (ChartSummary & { bestScore: number; description: string }) | null
+    | (ChartSummary & {
+        bestScore: number;
+        description: string;
+        features: string[];
+      })
+    | null
   >;
   onChange: (difficulty: DifficultyId) => void;
 }
@@ -48,18 +53,54 @@ export function DifficultySelector({
           >
             <span>{meta[difficulty].label}</span>
             <b>LV.{levels[difficulty] ?? "--"}</b>
+            {details?.[difficulty] && (
+              <small>
+                {details[difficulty]?.features.slice(0, 2).join(" · ")}
+              </small>
+            )}
           </button>
         ))}
       </div>
       {selected && (
         <div className="difficulty-detail" aria-live="polite">
           <p>{selected.description}</p>
+          <div className="difficulty-features" aria-label="谱面特征">
+            {selected.features.map((feature) => (
+              <b key={feature}>{feature}</b>
+            ))}
+          </div>
           <div>
             <span>{selected.noteCount} 音符</span>
             <span>{selected.tapCount} Tap</span>
             <span>{selected.holdCount} Hold</span>
             <span>BEST {String(selected.bestScore).padStart(7, "0")}</span>
           </div>
+          <dl className="chart-metrics">
+            <div>
+              <dt>平均 NPS</dt>
+              <dd>{selected.averageNps.toFixed(2)}</dd>
+            </div>
+            <div>
+              <dt>峰值 NPS</dt>
+              <dd>{selected.peakNps}</dd>
+            </div>
+            <div>
+              <dt>双押比例</dt>
+              <dd>{Math.round(selected.chordRatio * 100)}%</dd>
+            </div>
+            <div>
+              <dt>最长换手</dt>
+              <dd>{selected.longestAlternation}</dd>
+            </div>
+            <div>
+              <dt>同轨连点</dt>
+              <dd>{selected.maxSameLaneRun}</dd>
+            </div>
+            <div>
+              <dt>Hold 中处理</dt>
+              <dd>{selected.notesDuringHolds}</dd>
+            </div>
+          </dl>
         </div>
       )}
     </section>

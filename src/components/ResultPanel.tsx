@@ -5,12 +5,13 @@ import type {
   RunFlags,
   GameStats,
 } from "../game/scoring";
-import type { FinishReason } from "../game/session";
+import type { FinishReason, PlayMode } from "../game/session";
 import type { DifficultyId } from "../game/types";
 
 interface ResultPanelProps {
   songId: string;
   songTitle: string;
+  songEnglishTitle?: string;
   difficulty: DifficultyId;
   noteCount: number;
   maxScoreUnits: number;
@@ -23,6 +24,7 @@ interface ResultPanelProps {
   timing: TimingSummary;
   newRecord: boolean;
   previousBestScore: number;
+  mode: PlayMode;
   onReplay: () => void;
   onBack: () => void;
 }
@@ -31,6 +33,7 @@ const formatScore = (score: number) => score.toString().padStart(7, "0");
 
 export function ResultPanel({
   songTitle,
+  songEnglishTitle,
   difficulty,
   noteCount,
   maxScoreUnits,
@@ -43,6 +46,7 @@ export function ResultPanel({
   timing,
   newRecord,
   previousBestScore,
+  mode,
   onReplay,
   onBack,
 }: ResultPanelProps) {
@@ -51,6 +55,7 @@ export function ResultPanel({
     ...timing.histogram.map((bucket) => bucket.count),
   );
   const abandoned = reason === "abandoned";
+  const practice = mode === "practice";
   return (
     <div className="game-overlay result-overlay result-overlay-upgraded">
       <div className={`grade grade-${grade}`}>
@@ -66,8 +71,12 @@ export function ResultPanel({
               : "// SESSION ABANDONED"}
         </span>
         <p className="result-track-name">
-          {songTitle} · {difficulty.toUpperCase()} · {noteCount} 音符 /{" "}
-          {maxScoreUnits} 计分单位
+          <strong>{songTitle}</strong>
+          {songEnglishTitle && <em>{songEnglishTitle}</em>}
+          <span>
+            {difficulty.toUpperCase()} · {noteCount} 音符 / {maxScoreUnits}{" "}
+            计分单位
+          </span>
         </p>
         <h2>
           {reason === "complete"
@@ -76,8 +85,14 @@ export function ResultPanel({
               ? "SYSTEM BREAK"
               : "RUN ABANDONED"}
         </h2>
-        {!abandoned && (
+        {practice && (
+          <div className="practice-result-badge">
+            PRACTICE / 练习模式 · 本局不会写入正式记录
+          </div>
+        )}
+        {!abandoned && !practice && (
           <div className="result-badges" aria-label="演奏成就">
+            {reason === "complete" && <b className="badge-clear">CLEAR</b>}
             {flags.ap && <b className="badge-ap">AP · ALL PERFECT</b>}
             {!flags.ap && flags.fc && (
               <b className="badge-fc">FC · FULL COMBO</b>
@@ -91,7 +106,7 @@ export function ResultPanel({
         <div className="result-highlights">
           <span>
             SCORE<b>{formatScore(score)}</b>
-            {!abandoned && (
+            {!abandoned && !practice && (
               <small>
                 历史差值 {score - previousBestScore >= 0 ? "+" : ""}
                 {score - previousBestScore}

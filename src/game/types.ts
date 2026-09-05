@@ -68,6 +68,12 @@ export interface ChartSummary {
   tapCount: number;
   holdCount: number;
   maxScoreUnits: number;
+  averageNps: number;
+  peakNps: number;
+  chordRatio: number;
+  longestAlternation: number;
+  maxSameLaneRun: number;
+  notesDuringHolds: number;
 }
 
 export interface ChartLoadSuccess {
@@ -92,12 +98,76 @@ export function scoringUnitsForNote(note: ChartNote): number {
 
 export function summarizeChart(chart: LoadedChart): ChartSummary {
   const holdCount = chart.notes.filter(isHoldNote).length;
+  const timeGroups = new Map<number, ChartNote[]>();
+  for (const note of chart.notes) {
+    const key = Math.round(note.time * 1000);
+    const group = timeGroups.get(key) ?? [];
+    group.push(note);
+    timeGroups.set(key, group);
+  }
+  const chordNotes = [...timeGroups.values()].reduce(
+    (total, group) => total + (group.length > 1 ? group.length : 0),
+    0,
+  );
+  let peakNps = 0;
+  let windowStart = 0;
+  for (let index = 0; index < chart.notes.length; index += 1) {
+    while (chart.notes[index].time - chart.notes[windowStart].time >= 1)
+      windowStart += 1;
+    peakNps = Math.max(peakNps, index - windowStart + 1);
+  }
+  const singleNotes = [...timeGroups.values()]
+    .filter((group) => group.length === 1)
+    .map((group) => group[0]);
+  let longestAlternation = singleNotes.length ? 1 : 0;
+  let currentAlternation = longestAlternation;
+  let maxSameLaneRun = singleNotes.length ? 1 : 0;
+  let currentSameLaneRun = maxSameLaneRun;
+  const continuationGap = (60 / chart.song.bpm) * 1.5;
+  for (let index = 1; index < singleNotes.length; index += 1) {
+    if (
+      singleNotes[index].time - singleNotes[index - 1].time >
+      continuationGap
+    ) {
+      currentAlternation = 1;
+      currentSameLaneRun = 1;
+      continue;
+    }
+    if (singleNotes[index].lane !== singleNotes[index - 1].lane) {
+      currentAlternation += 1;
+      currentSameLaneRun = 1;
+    } else {
+      currentAlternation = 1;
+      currentSameLaneRun += 1;
+    }
+    longestAlternation = Math.max(longestAlternation, currentAlternation);
+    maxSameLaneRun = Math.max(maxSameLaneRun, currentSameLaneRun);
+  }
+  const notesDuringHolds = chart.notes
+    .filter(isHoldNote)
+    .reduce(
+      (total, hold) =>
+        total +
+        chart.notes.filter(
+          (note) =>
+            note.id !== hold.id &&
+            note.lane !== hold.lane &&
+            note.time > hold.time + 0.001 &&
+            note.time < hold.time + hold.duration - 0.001,
+        ).length,
+      0,
+    );
   return {
     level: chart.level,
     noteCount: chart.noteCount,
     tapCount: chart.noteCount - holdCount,
     holdCount,
     maxScoreUnits: chart.totalScoringUnits,
+    averageNps: chart.noteCount / chart.song.duration,
+    peakNps,
+    chordRatio: chart.noteCount ? chordNotes / chart.noteCount : 0,
+    longestAlternation,
+    maxSameLaneRun,
+    notesDuringHolds,
   };
 }
-

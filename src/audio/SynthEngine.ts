@@ -33,6 +33,19 @@ export class SynthEngine {
   private noiseBuffer: AudioBuffer | null = null;
   private schedule: ActiveSchedule | null = null;
   private settings: GameSettings | null = null;
+  private suspendPromise: Promise<void> | null = null;
+
+  private async ensureRunning(context: AudioContext): Promise<void> {
+    const pendingSuspend = this.suspendPromise;
+    if (pendingSuspend) {
+      try {
+        await pendingSuspend;
+      } finally {
+        if (this.suspendPromise === pendingSuspend) this.suspendPromise = null;
+      }
+    }
+    if (context.state !== "running") await context.resume();
+  }
 
   private createReverbImpulse(context: AudioContext): AudioBuffer {
     const length = Math.ceil(context.sampleRate * 1.35);
@@ -551,7 +564,7 @@ export class SynthEngine {
   async start(chart: LoadedChart, countdownSeconds = 3): Promise<number> {
     const context = this.ensureContext();
     this.stopAll();
-    if (context.state !== "running") await context.resume();
+    await this.ensureRunning(context);
     const startTime = context.currentTime + countdownSeconds + 0.12;
     this.schedule = {
       chart,
@@ -594,10 +607,12 @@ export class SynthEngine {
   async startPreview(
     chart: LoadedChart,
     durationSeconds = 10,
-  ): Promise<number> {
+    isCurrent: () => boolean = () => true,
+  ): Promise<number | null> {
     const context = this.ensureContext();
     this.stopAll();
-    if (context.state !== "running") await context.resume();
+    await this.ensureRunning(context);
+    if (!isCurrent()) return null;
     const startTime = context.currentTime + 0.08;
     this.schedule = {
       chart,
@@ -612,7 +627,7 @@ export class SynthEngine {
   async playTutorialPulse(step: number): Promise<number> {
     const context = this.ensureContext();
     this.stopAll();
-    if (context.state !== "running") await context.resume();
+    await this.ensureRunning(context);
     const first = context.currentTime + 0.12;
     const interval = step === 2 ? 0.62 : 0.5;
     for (let index = 0; index < 4; index += 1) {
@@ -642,12 +657,23 @@ export class SynthEngine {
   }
 
   async suspend(): Promise<void> {
-    if (this.context?.state === "running") await this.context.suspend();
+    if (!this.context) return;
+    if (this.suspendPromise) {
+      await this.suspendPromise;
+      return;
+    }
+    if (this.context.state !== "running") return;
+    const pending = this.context.suspend();
+    this.suspendPromise = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.suspendPromise === pending) this.suspendPromise = null;
+    }
   }
 
   async resume(): Promise<void> {
-    if (this.context && this.context.state !== "running")
-      await this.context.resume();
+    if (this.context) await this.ensureRunning(this.context);
   }
 
   playHit(lane: Lane, judgement: HitJudgement): void {
@@ -696,7 +722,7 @@ export class SynthEngine {
   async startCalibration(): Promise<CalibrationClock> {
     const context = this.ensureContext();
     this.stopAll();
-    if (context.state !== "running") await context.resume();
+    await this.ensureRunning(context);
     const clock: CalibrationClock = {
       firstBeatTime: context.currentTime + 0.7,
       beatDuration: 0.5,
@@ -722,7 +748,7 @@ export class SynthEngine {
   async playCalibrationPreview(): Promise<void> {
     const context = this.ensureContext();
     this.stopAll();
-    if (context.state !== "running") await context.resume();
+    await this.ensureRunning(context);
     const first = context.currentTime + 0.15;
     for (let index = 0; index < 4; index += 1) {
       this.scheduleTone(
@@ -772,6 +798,6 @@ export class SynthEngine {
     this.music = null;
     this.hit = null;
     this.noiseBuffer = null;
+    this.suspendPromise = null;
   }
 }
-
