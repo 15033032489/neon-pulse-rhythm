@@ -23,6 +23,10 @@ interface DifficultySelectorProps {
       })
     | null
   >;
+  drafts?: Record<
+    DifficultyId,
+    { status: "draft"; description: string } | null
+  >;
   onChange: (difficulty: DifficultyId) => void;
 }
 
@@ -31,6 +35,7 @@ export function DifficultySelector({
   disabled,
   levels,
   details,
+  drafts,
   onChange,
 }: DifficultySelectorProps) {
   const selected = details?.[value] ?? null;
@@ -47,12 +52,18 @@ export function DifficultySelector({
             role="radio"
             aria-checked={value === difficulty}
             className={value === difficulty ? "is-selected" : ""}
-            disabled={disabled || levels[difficulty] === null}
+            disabled={disabled}
             onClick={() => onChange(difficulty)}
             key={difficulty}
           >
             <span>{meta[difficulty].label}</span>
-            <b>LV.{levels[difficulty] ?? "--"}</b>
+            <b>
+              {levels[difficulty] === null
+                ? drafts?.[difficulty]
+                  ? "待制谱"
+                  : "LV.--"
+                : `LV.${levels[difficulty]}`}
+            </b>
             {details?.[difficulty] && (
               <small>
                 {details[difficulty]?.features.slice(0, 2).join(" · ")}
@@ -101,6 +112,19 @@ export function DifficultySelector({
               <dd>{selected.notesDuringHolds}</dd>
             </div>
           </dl>
+        </div>
+      )}
+      {!selected && drafts?.[value] && (
+        <div className="difficulty-detail is-draft" aria-live="polite">
+          <p>{drafts[value]?.description}</p>
+          <div className="difficulty-features" aria-label="谱面状态">
+            <b>制作模板</b>
+            <b>等待匹配音频</b>
+          </div>
+          <div>
+            <span>音符未生成</span>
+            <span>不会计入 18 套正式谱面</span>
+          </div>
         </div>
       )}
     </section>

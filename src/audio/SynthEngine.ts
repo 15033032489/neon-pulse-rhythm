@@ -562,6 +562,8 @@ export class SynthEngine {
   }
 
   async start(chart: LoadedChart, countdownSeconds = 3): Promise<number> {
+    if (chart.song.audioMode === "local-import")
+      throw new Error("本地音频歌曲必须使用已验证音频与完成谱面启动。");
     const context = this.ensureContext();
     this.stopAll();
     await this.ensureRunning(context);
@@ -622,6 +624,41 @@ export class SynthEngine {
     };
     this.pumpScheduler();
     return startTime + this.schedule.endSongTime;
+  }
+
+  async decodeLocalAudio(data: ArrayBuffer): Promise<AudioBuffer> {
+    const context = this.ensureContext();
+    try {
+      return await context.decodeAudioData(data.slice(0));
+    } catch {
+      throw new Error("音频解码失败，文件可能损坏或编码格式不受支持。");
+    }
+  }
+
+  async startLocalPreview(
+    buffer: AudioBuffer,
+    offsetSeconds = 0,
+    durationSeconds = 10,
+    isCurrent: () => boolean = () => true,
+  ): Promise<number | null> {
+    const context = this.ensureContext();
+    this.stopAll();
+    await this.ensureRunning(context);
+    if (!isCurrent()) return null;
+    const offset = Math.min(
+      Math.max(0, offsetSeconds),
+      Math.max(0, buffer.duration - 0.05),
+    );
+    const playableDuration = Math.min(
+      Math.max(0.05, durationSeconds),
+      Math.max(0.05, buffer.duration - offset),
+    );
+    const source = this.track(context.createBufferSource());
+    source.buffer = buffer;
+    source.connect(this.music as GainNode);
+    const startTime = context.currentTime + 0.08;
+    source.start(startTime, offset, playableDuration);
+    return startTime + playableDuration;
   }
 
   async playTutorialPulse(step: number): Promise<number> {

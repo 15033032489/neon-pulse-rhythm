@@ -30,8 +30,14 @@ export interface RunRecordInput {
 }
 
 const gradeRank: Record<Grade, number> = { D: 0, C: 1, B: 2, A: 3, S: 4 };
-export const recordKey = (songId: string, difficulty: DifficultyId) =>
-  `${songId}:${difficulty}`;
+export const recordKey = (
+  songId: string,
+  difficulty: DifficultyId,
+  audioVersion?: string | null,
+) =>
+  audioVersion?.trim()
+    ? `${songId}@${encodeURIComponent(audioVersion.trim())}:${difficulty}`
+    : `${songId}:${difficulty}`;
 
 export const emptyRecordBook = (): RecordBook => ({
   version: RECORDS_VERSION,
@@ -101,8 +107,9 @@ export function mergeRecord(
   difficulty: DifficultyId,
   run: RunRecordInput,
   timestamp = new Date().toISOString(),
+  audioVersion?: string | null,
 ): { book: RecordBook; record: PlayRecord; newRecord: boolean } {
-  const key = recordKey(songId, difficulty);
+  const key = recordKey(songId, difficulty, audioVersion);
   const previous = book.entries[key];
   const record: PlayRecord = {
     bestScore: Math.max(previous?.bestScore ?? 0, run.score),

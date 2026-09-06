@@ -1,0 +1,137 @@
+{
+  "version": 1,
+  "status": "awaiting-matched-audio",
+  "notice": "这些是制谱方向模板，不是已完成谱面。必须先取得玩家有权使用的本地音频并测量时长、第一拍与速度信息。",
+  "songs": [
+    {
+      "songId": "jay-chou-qing-tian-local",
+      "audioVersion": "玩家本地合法副本 · 版本待核验",
+      "expectedDuration": null,
+      "firstBeatOffsetMs": null,
+      "previewStart": null,
+      "previewDuration": 10,
+      "tempoMap": null,
+      "charts": {
+        "easy": {
+          "status": "draft",
+          "description": "计划跟随明显主拍、鼓组与吉他节奏，使用少量短 Hold；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "normal": {
+          "status": "draft",
+          "description": "计划加入乐句切分、左右手交替和中等长度 Hold；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "hard": {
+          "status": "draft",
+          "description": "计划表达伴奏细节、停顿与复合节奏，不随机堆键；等待匹配音频测量后制谱。",
+          "notes": []
+        }
+      }
+    },
+    {
+      "songId": "jay-chou-qi-li-xiang-local",
+      "audioVersion": "玩家本地合法副本 · 版本待核验",
+      "expectedDuration": null,
+      "firstBeatOffsetMs": null,
+      "previewStart": null,
+      "previewDuration": 10,
+      "tempoMap": null,
+      "charts": {
+        "easy": {
+          "status": "draft",
+          "description": "计划以稳定鼓点和清晰层次为主，少量短 Hold；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "normal": {
+          "status": "draft",
+          "description": "计划表现节奏起伏、切分与副歌层次，加入适量双押；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "hard": {
+          "status": "draft",
+          "description": "计划细化鼓组和伴奏层，控制密度并保持手型可读；等待匹配音频测量后制谱。",
+          "notes": []
+        }
+      }
+    },
+    {
+      "songId": "jay-chou-ye-qu-local",
+      "audioVersion": "玩家本地合法副本 · 版本待核验",
+      "expectedDuration": null,
+      "firstBeatOffsetMs": null,
+      "previewStart": null,
+      "previewDuration": 10,
+      "tempoMap": null,
+      "charts": {
+        "easy": {
+          "status": "draft",
+          "description": "计划以清晰钢琴落点和主鼓拍教学基础输入；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "normal": {
+          "status": "draft",
+          "description": "计划加入钢琴节奏、切分鼓点、双押与旋律型 Hold；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "hard": {
+          "status": "draft",
+          "description": "计划在密集段使用快速交替并保留清楚重音，避免随机连打；等待匹配音频测量后制谱。",
+          "notes": []
+        }
+      }
+    },
+    {
+      "songId": "jay-chou-dao-xiang-local",
+      "audioVersion": "玩家本地合法副本 · 版本待核验",
+      "expectedDuration": null,
+      "firstBeatOffsetMs": null,
+      "previewStart": null,
+      "previewDuration": 10,
+      "tempoMap": null,
+      "charts": {
+        "easy": {
+          "status": "draft",
+          "description": "计划跟随轻快主拍和打击乐，作为首次音游的友好谱面；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "normal": {
+          "status": "draft",
+          "description": "计划加入律动切分、交替与轻量双押，保持活泼手感；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "hard": {
+          "status": "draft",
+          "description": "计划刻画打击乐细节与快速节奏变化，避免机械轮转；等待匹配音频测量后制谱。",
+          "notes": []
+        }
+      }
+    },
+    {
+      "songId": "jay-chou-qing-hua-ci-local",
+      "audioVersion": "玩家本地合法副本 · 版本待核验",
+      "expectedDuration": null,
+      "firstBeatOffsetMs": null,
+      "previewStart": null,
+      "previewDuration": 10,
+      "tempoMap": null,
+      "charts": {
+        "easy": {
+          "status": "draft",
+          "description": "计划以主拍和少量短 Hold 表达延音与留白；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "normal": {
+          "status": "draft",
+          "description": "计划用不同长度 Hold、切分和少量双押表现层次；等待匹配音频测量后制谱。",
+          "notes": []
+        },
+        "hard": {
+          "status": "draft",
+          "description": "计划在单手 Hold 上安排另一手节奏，控制慢歌密度；等待匹配音频测量后制谱。",
+          "notes": []
+        }
+      }
+    }
+  ]
+}

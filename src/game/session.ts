@@ -17,6 +17,8 @@ export interface RunSession {
   noteCount: number;
   maxScoreUnits: number;
   mode: PlayMode;
+  audioVersion?: string;
+  audioOffsetMs?: number;
 }
 
 export interface RemainingRunWork {
@@ -33,6 +35,8 @@ export interface FinalizedRun {
 export function createRunSession(
   chart: LoadedChart,
   mode: PlayMode = "standard",
+  audioVersion?: string,
+  audioOffsetMs?: number,
 ): RunSession {
   return Object.freeze({
     songId: chart.song.id,
@@ -43,6 +47,8 @@ export function createRunSession(
     noteCount: chart.noteCount,
     maxScoreUnits: chart.totalScoringUnits,
     mode,
+    audioVersion,
+    audioOffsetMs,
   });
 }
 

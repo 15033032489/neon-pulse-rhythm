@@ -1,6 +1,6 @@
 # Neon Pulse
 
-Neon Pulse 是一款可直接在浏览器运行的四键下落式音乐节奏游戏。项目使用 React、TypeScript、Vite、Web Audio API 和 Vitest；内置 `Chromatic Run` 与 `Midnight Arcade` 两首原创电子曲，以及四首经典交响主题的原创合成改编，不加载外部歌曲、图片或字体。
+Neon Pulse 是一款可直接在浏览器运行的四键下落式音乐节奏游戏。项目使用 React、TypeScript、Vite、Web Audio API 和 Vitest；内置 `Chromatic Run` 与 `Midnight Arcade` 两首原创电子曲、四首经典交响主题的原创合成改编，并为五首华语流行歌曲提供合规的浏览器本地音频导入入口。公开构建不包含商业歌曲录音、歌词、第三方 MIDI、唱片封面或艺人图片。
 
 ## 安装与运行
 
@@ -41,9 +41,9 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 
 正 Offset 会让谱面和判定相对音乐更晚，负 Offset 会让它们更早。手动滑块和自动校准结果都以 5ms 为步长。自动校准包含 4 个预热拍和 16 个采样拍，过滤明显异常值后使用中位数与 MAD 进行稳健估计。
 
-设置以版本 3 结构保存在 `neon-pulse:settings`，并兼容旧的速度/Offset 设置。判定偏移与视觉偏移相互独立；主音量、音乐、打击音、特效强度、震屏、触觉反馈和四轨键位也会保存在本机。教程完成状态单独保存在 `neon-pulse:tutorial:v1`，不会写入正式成绩。成绩按“歌曲 + 难度”保存在版本 2 的 `neon-pulse:records`，旧记录会无损补齐 Clear 字段，并继续保留最高分、准确率、最大连击、最佳评级、FC 与 AP。放弃本局不会保存成绩，也不会把剩余音符强制补记为 Miss。
+设置以版本 3 结构保存在 `neon-pulse:settings`，并兼容旧的速度/Offset 设置。判定偏移与视觉偏移相互独立；主音量、音乐、打击音、特效强度、震屏、触觉反馈和四轨键位也会保存在本机。教程完成状态单独保存在 `neon-pulse:tutorial:v1`，不会写入正式成绩。现有成绩仍按“歌曲 + 难度”使用原键名保存；未来完成的本地音频谱面会按“歌曲 + 音频版本 + 难度”隔离记录，不会混用不同版本。旧记录会无损补齐 Clear 字段，并继续保留最高分、准确率、最大连击、最佳评级、FC 与 AP。放弃本局不会保存成绩，也不会把剩余音符强制补记为 Miss。
 
-选中难度时，界面会直接从 JSON 谱面计算音符总数、Tap/Hold、平均与峰值 NPS、双押比例、最长连续换手、同轨连点和 Hold 期间的其他输入量。开发环境还会严格检查 6 首歌曲与 18 套谱面的唯一 ID、时间顺序、轨道范围、重复输入、Hold 重叠、歌曲边界、主判定总数和 1,000,000 理论满分；错误信息包含歌曲、难度和音符索引。
+选中难度时，界面会直接从 JSON 谱面计算音符总数、Tap/Hold、平均与峰值 NPS、双押比例、最长连续换手、同轨连点和 Hold 期间的其他输入量。开发环境还会严格检查 6 首可玩歌曲与 18 套正式谱面的唯一 ID、时间顺序、轨道范围、重复输入、Hold 重叠、歌曲边界、主判定总数和 1,000,000 理论满分；同时检查五首本地歌曲的 15 个模板没有伪造音符或推测音频数据。错误信息包含歌曲、难度和音符索引。
 
 ## 源码结构
 
@@ -52,6 +52,7 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 - `src/charts/parseChart.ts`：谱面加载、排序、字段校验与轨道索引构建。
 - `src/charts/validateCatalog.ts`：开发环境的全曲库严格校验与理论满分验证。
 - `src/audio/SynthEngine.ts`：Web Audio 合成、试听、教程节拍、音量总线、暂停恢复与校准节拍。
+- `src/audio/LocalAudioLibrary.ts`：本地文件校验、内存解码缓存、对象 URL 生命周期和试听接入。
 - `src/audio/scheduler.ts`：基于音频时钟的短窗口调度游标。
 - `src/game/chartRuntime.ts`：Tap/Hold 状态机、漏击游标、暂停与重新按住逻辑。
 - `src/game/chartIndex.ts`：可见时间窗口二分索引。
@@ -59,6 +60,7 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 - `src/game/calibration.ts`：自动校准的稳健统计算法。
 - `src/game/settings.ts`、`src/game/records.ts`：版本化设置与成绩持久化。
 - `src/game/selection.ts`：首次 Easy、选曲记忆与旧玩家最近成绩迁移。
+- `src/game/localSongPreferences.ts`：每首本地歌曲的版本标签、独立偏移和上次检测时长；不保存音频或文件名。
 - `src/game/audioActivity.ts`：试听、校准与教程音频的互斥和统一清理。
 - `src/game/displayState.ts`：待机、演奏、暂停与结算的展示语义。
 - `src/components/`：难度、校准、教程、确认和结算界面。
@@ -66,7 +68,7 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 
 ## 添加原创歌曲
 
-1. 在 `src/songs/catalog.ts` 增加歌曲元数据。`id` 必须唯一，`duration` 以秒为单位；`category` 选择 `original` 或 `classical`，`synthProfile` 选择现有合成风格，也可以按第 3 步新增。
+1. 在 `src/songs/catalog.ts` 增加歌曲元数据。`id` 必须唯一，`duration` 以秒为单位；`category` 选择 `original`、`classical` 或 `mandopop`，`synthProfile` 选择现有合成风格，也可以按第 3 步新增。
 2. 为每个难度在 `src/charts/` 创建独立 JSON，并在 `src/charts/index.ts` 注册。格式如下：
 
 ```json
@@ -105,3 +107,16 @@ Vite 的 `base` 使用相对路径 `./`，因此生产资源既能部署在网�
 - 贝多芬《第九交响曲》第四乐章“欢乐颂”主题，作品 125：78 秒，100 BPM。参考 [IMSLP 公版总谱索引](https://imslp.org/wiki/Ludwig_van_Beethoven%3A_Symphony_No.9%2C_Op.125_%28Beethoven%2C_Ludwig_van%29)。本改编不使用人声。
 
 IMSLP 各文件可能带有地区性公版提示；本项目只参考作品本身及页面中标记为 Public Domain 的历史总谱，不再分发原始扫描文件。`scripts/generate-classical-charts.mjs` 保存四首曲目的节奏网格与谱面编排规则，可重新生成 12 个 JSON 谱面；生成后的 JSON 仍会经过与手写谱面相同的排序、轨道、Hold 重叠和歌曲边界校验。
+
+## 华语流行、本地音频与版权
+
+《晴天》《七里香》《夜曲》《稻香》《青花瓷》及相关商业录音仍受版权保护。仓库审计没有发现用户提供且明确允许网页公开分发的音频，因此本项目采用“本地音乐导入模式”：
+
+- GitHub 仓库和生产构建不包含这些歌曲的录音、伴奏、分轨、翻唱、MIDI、完整歌词、专辑封面、MV 截图或艺人照片。
+- 玩家只能从自己的设备选择有权使用的本地音频。代码通过 `File.arrayBuffer()` 和 `AudioContext.decodeAudioData()` 在浏览器内解码；不调用上传接口，不发送文件网络请求，也不把音频写入 `localStorage`。
+- 解码后的 `AudioBuffer` 最多缓存两首，替换、淘汰、切换生命周期和组件卸载都会停止音源并释放对象 URL。刷新页面后浏览器不会继续持有文件，界面会要求重新选择。
+- `src/songs/music-licenses.json` 的 `bundledAudio` 为空，明确记录当前没有获准公开分发的内置商业录音。
+- `src/songs/mandopop-chart-templates.json` 只记录 `audioVersion`、`expectedDuration`、`firstBeatOffsetMs`、`previewStart`、`previewDuration`、`tempoMap` 和三档制谱方向。未经实际匹配音频测量的 BPM、时长、第一拍和速度表保持为空，不凭记忆填写。
+- 当前 15 个 Easy/Normal/Hard 项目均明确标记为 `draft` 且 `notes` 为空，不计入 18 套正式可玩谱面。导入文件后可试听 10 秒并保存歌曲独立偏移，但正式开始按钮仍会保持禁用，直到取得合法匹配版本、测量同步参数并完成逐拍制谱。
+
+完成正式谱面前，需要在合法音频副本上逐首测量准确时长、第一拍偏移、BPM/变速和试听起点，再按模板方向制作音符并通过现有谱面验证器。音符数据只能表达演奏节奏，不得加入歌词或能够还原完整旋律的音高序列。

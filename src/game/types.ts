@@ -4,14 +4,16 @@ export const DIFFICULTIES = ["easy", "normal", "hard"] as const;
 export type Lane = 0 | 1 | 2 | 3;
 export type DifficultyId = (typeof DIFFICULTIES)[number];
 export type NoteType = "tap" | "hold";
-export type SongCategory = "original" | "classical";
+export type SongCategory = "original" | "classical" | "mandopop";
+export type SongAudioMode = "synth" | "local-import";
 export type SynthProfile =
   | "chromatic"
   | "night-drive"
   | "beethoven-5"
   | "mozart-40"
   | "new-world"
-  | "ode-to-joy";
+  | "ode-to-joy"
+  | "local-import";
 
 interface BaseChartNote {
   id: string;
@@ -51,9 +53,32 @@ export interface SongDefinition {
   movement?: string;
   workNumber?: string;
   licenseLabel?: string;
+  copyrightNotice?: string;
+  audioMode: SongAudioMode;
+  audioVersion?: string;
+  expectedDuration?: number | null;
+  firstBeatOffsetMs?: number | null;
+  previewStart?: number | null;
+  previewDuration?: number;
+  tempoMap?: Array<{ time: number; bpm: number }> | null;
+  chartStatus?: "ready" | "awaiting-matched-audio";
   synthProfile: SynthProfile;
-  accent: "cyan" | "violet" | "gold" | "rose" | "ember" | "azure";
+  accent:
+    | "cyan"
+    | "violet"
+    | "gold"
+    | "rose"
+    | "ember"
+    | "azure"
+    | "sunny"
+    | "summer"
+    | "nocturne"
+    | "harvest"
+    | "porcelain";
 }
+
+export const isLocalImportSong = (song: SongDefinition): boolean =>
+  song.audioMode === "local-import";
 
 export interface LoadedChart extends ChartDefinition {
   song: SongDefinition;

@@ -15,6 +15,7 @@ const makeChart = (notes: ChartNote[]): LoadedChart => ({
     title: "Test",
     artist: "Test",
     category: "original",
+    audioMode: "synth",
     bpm: 120,
     duration: 10,
     subtitle: "Test",
@@ -115,4 +116,3 @@ describe("Hold 状态机", () => {
     });
   });
 });
-

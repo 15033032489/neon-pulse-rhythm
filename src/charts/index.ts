@@ -49,6 +49,14 @@ export function loadBuiltInChart(
 ): ChartLoadResult {
   const song = findSong(songId);
   if (!song) return { ok: false, errors: [`找不到歌曲 “${songId}”。`] };
+  if (song.audioMode === "local-import") {
+    return {
+      ok: false,
+      errors: [
+        `歌曲 “${song.title}” 需要先导入有权使用的匹配音频；当前仅提供待制谱模板。`,
+      ],
+    };
+  }
   const rawChart = RAW_CHARTS[`${songId}:${difficulty}`];
   if (!rawChart) {
     return {
@@ -60,4 +68,3 @@ export function loadBuiltInChart(
 }
 
 export const DEFAULT_CHART_RESULT = loadBuiltInChart(DEMO_SONG.id, "normal");
-

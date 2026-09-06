@@ -4,6 +4,7 @@ import {
   loadRecords,
   mergeRecord,
   RECORDS_STORAGE_KEY,
+  recordKey,
 } from "./records";
 
 describe("成绩记录", () => {
@@ -86,5 +87,12 @@ describe("成绩记录", () => {
       fc: false,
       ap: false,
     });
+  });
+
+  it("保留旧歌曲键格式，并按本地音频版本隔离成绩", () => {
+    expect(recordKey("legacy", "normal")).toBe("legacy:normal");
+    expect(recordKey("local", "hard", "CD 版")).not.toBe(
+      recordKey("local", "hard", "现场版"),
+    );
   });
 });

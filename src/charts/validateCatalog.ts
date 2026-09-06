@@ -8,6 +8,7 @@ import {
   RULESET,
 } from "../game/scoring";
 import type { DifficultyId } from "../game/types";
+import { validateMandopopTemplates } from "../songs/mandopopTemplates";
 
 const DIFFICULTIES: DifficultyId[] = ["easy", "normal", "hard"];
 
@@ -20,6 +21,7 @@ export function validateBuiltInCatalog(): string[] {
   for (const song of SONG_CATALOG) {
     if (songIds.has(song.id)) errors.push(`[${song.id}] 歌曲 ID 重复。`);
     songIds.add(song.id);
+    if (song.audioMode === "local-import") continue;
     for (const difficulty of DIFFICULTIES) {
       const context = `[${song.id}/${difficulty}]`;
       const result = loadBuiltInChart(song.id, difficulty);
@@ -58,5 +60,5 @@ export function validateBuiltInCatalog(): string[] {
         errors.push(`${context} 理论最高分不是 1,000,000。`);
     }
   }
-  return errors;
+  return [...errors, ...validateMandopopTemplates()];
 }

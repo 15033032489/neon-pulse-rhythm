@@ -11,6 +11,12 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { SynthEngine, type CalibrationClock } from "./audio/SynthEngine";
+import {
+  LocalAudioImportError,
+  LocalAudioLibrary,
+  validateLocalAudioDuration,
+  type DurationValidation,
+} from "./audio/LocalAudioLibrary";
 import { CalibrationPanel } from "./components/CalibrationPanel";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { DifficultySelector } from "./components/DifficultySelector";
@@ -36,6 +42,12 @@ import {
   saveRecords,
   type RecordBook,
 } from "./game/records";
+import {
+  loadLocalSongPreferences,
+  saveLocalSongPreferences,
+  updateLocalSongPreference,
+  type LocalSongPreferenceBook,
+} from "./game/localSongPreferences";
 import {
   loadSelection,
   saveSelection,
@@ -93,6 +105,7 @@ import {
   type LoadedChart,
   type SongCategory,
 } from "./game/types";
+import { getMandopopTemplate } from "./songs/mandopopTemplates";
 
 type GamePhase =
   | "idle"
@@ -136,6 +149,15 @@ interface RunResult {
   newRecord: boolean;
   previousBestScore: number;
   mode: PlayMode;
+  audioVersion?: string;
+}
+
+interface LocalAudioUiState {
+  status: "missing" | "loading" | "ready" | "error";
+  fileName?: string;
+  duration?: number;
+  validation?: DurationValidation;
+  message?: string;
 }
 
 type NoteStyle = CSSProperties & {
@@ -215,6 +237,17 @@ const difficultyFeatures = (
   if (summary.peakNps >= 8 && features.length < 3) features.push("高密度");
   return features.slice(0, 3);
 };
+const songBpmLabel = (song: (typeof SONG_CATALOG)[number]) =>
+  song.audioMode === "local-import" ? "待测" : String(song.bpm);
+const songDurationLabel = (
+  song: (typeof SONG_CATALOG)[number],
+  importedDuration?: number,
+) =>
+  importedDuration
+    ? formatClockTime(importedDuration)
+    : song.audioMode === "local-import"
+      ? "待测"
+      : formatClockTime(song.duration);
 const blocksGameplayInput = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
   Boolean(
@@ -263,6 +296,31 @@ export default function App() {
   const settingsRef = useRef(settings);
   const [records, setRecords] = useState<RecordBook>(() => loadRecords());
   const recordsRef = useRef(records);
+  const [localSongPreferences, setLocalSongPreferences] =
+    useState<LocalSongPreferenceBook>(() => loadLocalSongPreferences());
+  const [localAudioUi, setLocalAudioUi] = useState<
+    Record<string, LocalAudioUiState>
+  >({});
+  const localAudioLibraryRef = useRef<LocalAudioLibrary | null>(null);
+  if (!localAudioLibraryRef.current)
+    localAudioLibraryRef.current = new LocalAudioLibrary(2);
+  const selectedLocalTemplate = getMandopopTemplate(menuSongId);
+  const selectedLocalPreference =
+    localSongPreferences.entries[menuSongId] ?? null;
+  const selectedLocalAudio = localAudioUi[menuSongId] ?? {
+    status: "missing" as const,
+  };
+  const draftDifficultyDetails = selectedLocalTemplate
+    ? (Object.fromEntries(
+        DIFFICULTIES.map((difficulty) => [
+          difficulty,
+          {
+            status: "draft" as const,
+            description: selectedLocalTemplate.charts[difficulty].description,
+          },
+        ]),
+      ) as Record<DifficultyId, { status: "draft"; description: string }>)
+    : undefined;
   const difficultyDetails = Object.fromEntries(
     DIFFICULTIES.map((value) => {
       const candidate = chartResults[value];
@@ -275,7 +333,15 @@ export default function App() {
                 ...summary,
                 description: candidate.chart.description,
                 bestScore:
-                  records.entries[recordKey(menuSongId, value)]?.bestScore ?? 0,
+                  records.entries[
+                    recordKey(
+                      menuSongId,
+                      value,
+                      selectedSong.audioMode === "local-import"
+                        ? selectedLocalPreference?.audioVersion
+                        : null,
+                    )
+                  ]?.bestScore ?? 0,
                 features: difficultyFeatures(value, summary),
               };
             })()
@@ -342,6 +408,7 @@ export default function App() {
   const tutorialTimerRef = useRef<number | null>(null);
   const tutorialHoldStartedRef = useRef<number | null>(null);
   const auxiliaryAudioRef = useRef(new AudioActivityController());
+  const localImportRequestRef = useRef(new Map<string, number>());
 
   const engineRef = useRef<SynthEngine | null>(null);
   const runtimeRef = useRef<ChartRuntime | null>(null);
@@ -375,6 +442,20 @@ export default function App() {
     if (!engineRef.current) engineRef.current = new SynthEngine();
     return engineRef.current;
   }, []);
+
+  const updateLocalPreference = useCallback(
+    (
+      songId: string,
+      update: Parameters<typeof updateLocalSongPreference>[2],
+    ) => {
+      setLocalSongPreferences((current) => {
+        const next = updateLocalSongPreference(current, songId, update);
+        saveLocalSongPreferences(next);
+        return next;
+      });
+    },
+    [],
+  );
 
   const laneIsPressed = useCallback((lane: Lane) => {
     for (const code of pressedCodesRef.current)
@@ -442,7 +523,11 @@ export default function App() {
     const rawTime = engine.getCurrentTime() - audioStartTimeRef.current;
     return {
       rawTime,
-      chartTime: rawTime - settingsRef.current.audioOffsetMs / 1000,
+      chartTime:
+        rawTime -
+        (sessionRef.current?.audioOffsetMs ??
+          settingsRef.current.audioOffsetMs) /
+          1000,
       frameTime: performance.now(),
     };
   }, []);
@@ -497,7 +582,11 @@ export default function App() {
       let newRecord = false;
       const previousBestScore =
         recordsRef.current.entries[
-          recordKey(currentSession.songId, currentSession.difficulty)
+          recordKey(
+            currentSession.songId,
+            currentSession.difficulty,
+            currentSession.audioVersion,
+          )
         ]?.bestScore ?? 0;
 
       if (shouldPersistRun(currentSession, finalized)) {
@@ -513,6 +602,8 @@ export default function App() {
             flags,
             cleared: reason === "complete",
           },
+          undefined,
+          currentSession.audioVersion,
         );
         recordsRef.current = merged.book;
         setRecords(merged.book);
@@ -537,6 +628,7 @@ export default function App() {
         newRecord,
         previousBestScore,
         mode: currentSession.mode,
+        audioVersion: currentSession.audioVersion,
       });
       setAbandonOpen(false);
       clearPressedInputs();
@@ -668,6 +760,13 @@ export default function App() {
       const nextSession = createRunSession(
         currentChart,
         requestedMode ?? playMode,
+        currentChart.song.audioMode === "local-import"
+          ? localSongPreferences.entries[currentChart.song.id]?.audioVersion
+          : undefined,
+        currentChart.song.audioMode === "local-import"
+          ? (localSongPreferences.entries[currentChart.song.id]?.userOffsetMs ??
+              0)
+          : undefined,
       );
       sessionRef.current = nextSession;
       setSession(nextSession);
@@ -682,7 +781,10 @@ export default function App() {
       setAutoPaused(false);
       updateClock({
         rawTime: -3.12,
-        chartTime: -3.12 - settingsRef.current.audioOffsetMs / 1000,
+        chartTime:
+          -3.12 -
+          (nextSession.audioOffsetMs ?? settingsRef.current.audioOffsetMs) /
+            1000,
         frameTime: performance.now(),
       });
 
@@ -720,6 +822,7 @@ export default function App() {
       playMode,
       readAudioClock,
       setGamePhase,
+      localSongPreferences.entries,
       updateClock,
     ],
   );
@@ -832,6 +935,20 @@ export default function App() {
   }, []);
 
   const startCalibration = useCallback(async () => {
+    if (
+      selectedSong.audioMode === "local-import" &&
+      !localAudioLibraryRef.current?.has(selectedSong.id)
+    ) {
+      setCalibrationResult({
+        ok: false,
+        recommendedOffsetMs: 0,
+        acceptedSamples: [],
+        ignoredCount: 0,
+        medianDeviationMs: 0,
+        message: "请先选择本地音频，再为这首歌保存独立偏移。",
+      });
+      return;
+    }
     try {
       auxiliaryAudioRef.current.stop();
       setPreviewSongId(null);
@@ -859,7 +976,7 @@ export default function App() {
         message: error instanceof Error ? error.message : "无法启动校准音频。",
       });
     }
-  }, [getEngine]);
+  }, [getEngine, selectedSong.audioMode, selectedSong.id]);
 
   const stopCalibration = useCallback(async (closePanel: boolean) => {
     auxiliaryAudioRef.current.stop("calibration");
@@ -935,6 +1052,92 @@ export default function App() {
     }
   }, []);
 
+  const clearLocalAudio = useCallback(
+    (songId: string) => {
+      if (previewSongId === songId) stopSongPreview();
+      localAudioLibraryRef.current?.clear(songId);
+      setLocalAudioUi((current) => ({
+        ...current,
+        [songId]: {
+          status: "missing",
+          message: "本地文件访问已释放；需要时请重新选择。",
+        },
+      }));
+    },
+    [previewSongId, stopSongPreview],
+  );
+
+  const importLocalAudio = useCallback(
+    async (songId: string, file: File) => {
+      const song = SONG_CATALOG.find((candidate) => candidate.id === songId);
+      if (!song || song.audioMode !== "local-import") return;
+      stopSongPreview();
+      const requestId = (localImportRequestRef.current.get(songId) ?? 0) + 1;
+      localImportRequestRef.current.set(songId, requestId);
+      setLocalAudioUi((current) => ({
+        ...current,
+        [songId]: { status: "loading", message: "正在浏览器内解码…" },
+      }));
+      setAudioError(null);
+      try {
+        const engine = getEngine();
+        const imported = await localAudioLibraryRef.current?.importFile(
+          songId,
+          file,
+          (data) => engine.decodeLocalAudio(data),
+        );
+        if (
+          !imported ||
+          localImportRequestRef.current.get(songId) !== requestId
+        )
+          return;
+        const validation = validateLocalAudioDuration(
+          imported.asset.duration,
+          song.expectedDuration,
+        );
+        setLocalAudioUi((current) => {
+          const next = { ...current };
+          for (const evictedSongId of imported.evictedSongIds)
+            next[evictedSongId] = {
+              status: "missing",
+              message: "为控制内存占用，较早导入的音频已释放，请重新选择。",
+            };
+          next[songId] = {
+            status: "ready",
+            fileName: imported.asset.fileName,
+            duration: imported.asset.duration,
+            validation,
+            message: validation.message,
+          };
+          return next;
+        });
+        updateLocalPreference(songId, {
+          audioVersion: song.audioVersion ?? "玩家本地合法副本 · 版本待核验",
+          lastDecodedDuration: imported.asset.duration,
+        });
+        setUiMessage(
+          "音频已在本机内存中解码；没有上传任何文件。可先试听并校准。 ",
+        );
+      } catch (error) {
+        if (
+          error instanceof LocalAudioImportError &&
+          error.code === "cancelled"
+        )
+          return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : "无法读取本地音频，请检查文件格式。";
+        setLocalAudioUi((current) => ({
+          ...current,
+          [songId]: { status: "error", message },
+        }));
+        setAudioError(message);
+      }
+    },
+    [getEngine, stopSongPreview, updateLocalPreference],
+  );
+
   const toggleSongPreview = useCallback(
     async (songId: string) => {
       if (previewSongId === songId) {
@@ -948,9 +1151,19 @@ export default function App() {
         return;
       if (calibrationOpen) await stopCalibration(true);
       setTutorialOpen(false);
+      const song = SONG_CATALOG.find((candidate) => candidate.id === songId);
+      if (!song) return;
+      const importedAsset =
+        song.audioMode === "local-import"
+          ? localAudioLibraryRef.current?.get(songId)
+          : null;
       const candidate = BUILT_IN_CHART_RESULTS[songId]?.normal;
-      if (!candidate?.ok) {
-        setAudioError("该歌曲缺少可试听的 Normal 谱面。");
+      if (song.audioMode === "local-import" && !importedAsset) {
+        setAudioError("请先选择本地音频；文件只会在当前浏览器内读取。 ");
+        return;
+      }
+      if (song.audioMode !== "local-import" && !candidate?.ok) {
+        setAudioError("该歌曲缺少可试听的 Normal 谱面。 ");
         return;
       }
       const requestId = previewRequestRef.current + 1;
@@ -975,13 +1188,20 @@ export default function App() {
       setPreviewSongId(songId);
       setAudioError(null);
       try {
-        const endTime = await engine.startPreview(
-          candidate.chart,
-          10,
-          () =>
-            requestId === previewRequestRef.current &&
-            auxiliaryAudioRef.current.current() === "preview",
-        );
+        const isCurrent = () =>
+          requestId === previewRequestRef.current &&
+          auxiliaryAudioRef.current.current() === "preview";
+        const endTime =
+          song.audioMode === "local-import" && importedAsset
+            ? await engine.startLocalPreview(
+                importedAsset.buffer,
+                song.previewStart ?? 0,
+                song.previewDuration ?? 10,
+                isCurrent,
+              )
+            : candidate?.ok
+              ? await engine.startPreview(candidate.chart, 10, isCurrent)
+              : null;
         if (
           endTime === null ||
           requestId !== previewRequestRef.current ||
@@ -1432,6 +1652,7 @@ export default function App() {
       calibrationSamplesRef.current = [];
       calibrationSeenBeatsRef.current.clear();
       auxiliaryAudioRef.current.stop();
+      localAudioLibraryRef.current?.clearAll();
       engineRef.current?.dispose();
     },
     [],
@@ -1516,7 +1737,15 @@ export default function App() {
   const stageSong = session?.chart.song ?? selectedSong;
   const stageDifficulty = session?.difficulty ?? menuDifficulty;
   const selectedBest =
-    records.entries[recordKey(menuSongId, menuDifficulty)] ?? null;
+    records.entries[
+      recordKey(
+        menuSongId,
+        menuDifficulty,
+        selectedSong.audioMode === "local-import"
+          ? selectedLocalPreference?.audioVersion
+          : null,
+      )
+    ] ?? null;
 
   const updateSetting = <Key extends keyof GameSettings>(
     key: Key,
@@ -1548,6 +1777,27 @@ export default function App() {
       maximum,
     );
     updateSetting(key, next as GameSettings[Key]);
+  };
+
+  const handleLocalOffsetKey = (
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    songId: string,
+  ) => {
+    if (
+      !["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp"].includes(event.key)
+    )
+      return;
+    event.preventDefault();
+    const current = localSongPreferences.entries[songId]?.userOffsetMs ?? 0;
+    const direction =
+      event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : -1;
+    updateLocalPreference(songId, {
+      userOffsetMs: clamp(
+        current + direction * (event.shiftKey ? 10 : 1),
+        -500,
+        500,
+      ),
+    });
   };
 
   const renderNote = (note: ChartNote) => {
@@ -1698,16 +1948,25 @@ export default function App() {
               </p>
               <div className="waiting-goal">
                 <b>本次目标</b>
-                <span>{chart?.description ?? "请选择可用谱面"}</span>
+                <span>
+                  {chart?.description ??
+                    selectedLocalTemplate?.charts[menuDifficulty].description ??
+                    "请选择可用谱面"}
+                </span>
               </div>
               <dl>
                 <div>
                   <dt>BPM</dt>
-                  <dd>{selectedSong.bpm}</dd>
+                  <dd>{songBpmLabel(selectedSong)}</dd>
                 </div>
                 <div>
                   <dt>时长</dt>
-                  <dd>{formatClockTime(selectedSong.duration)}</dd>
+                  <dd>
+                    {songDurationLabel(
+                      selectedSong,
+                      selectedLocalAudio.duration,
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt>音符</dt>
@@ -1722,7 +1981,11 @@ export default function App() {
                     {selectedBest.bestGrade}
                   </b>
                 ) : (
-                  <b>尚无正式成绩</b>
+                  <b>
+                    {selectedSong.audioMode === "local-import"
+                      ? "谱面完成后才会记录"
+                      : "尚无正式成绩"}
+                  </b>
                 )}
               </div>
             </div>
@@ -1805,7 +2068,9 @@ export default function App() {
               <i>
                 <b style={{ transform: "scaleX(0)" }} />
               </i>
-              <span>{formatClockTime(selectedSong.duration)}</span>
+              <span>
+                {songDurationLabel(selectedSong, selectedLocalAudio.duration)}
+              </span>
             </div>
           ) : null}
         </aside>
@@ -1866,8 +2131,10 @@ export default function App() {
               </div>
             ) : (
               <div className="stage-selection-meta" data-testid="selection-hud">
-                <span>{selectedSong.bpm} BPM</span>
-                <span>{formatClockTime(selectedSong.duration)}</span>
+                <span>{songBpmLabel(selectedSong)} BPM</span>
+                <span>
+                  {songDurationLabel(selectedSong, selectedLocalAudio.duration)}
+                </span>
                 <span>{chart?.noteCount ?? "--"} 音符</span>
                 <span>
                   {menuDifficulty.toUpperCase()} · LV.{chart?.level ?? "--"}
@@ -2023,7 +2290,9 @@ export default function App() {
                   <i />
                   {selectedSong.category === "classical"
                     ? "PUBLIC DOMAIN · ORIGINAL SYNTH ARRANGEMENT"
-                    : "ORIGINAL SYNTH TRACK"}
+                    : selectedSong.category === "mandopop"
+                      ? "LOCAL AUDIO · NEVER UPLOADED"
+                      : "ORIGINAL SYNTH TRACK"}
                 </div>
                 <h2
                   className={
@@ -2031,12 +2300,12 @@ export default function App() {
                   }
                 >
                   <span className="title-primary">
-                    {selectedSong.category === "classical"
+                    {selectedSong.category !== "original"
                       ? selectedSong.title
                       : selectedSong.title.split(" ")[0].toUpperCase()}
                   </span>
                   <em className="title-secondary">
-                    {selectedSong.category === "classical"
+                    {selectedSong.category !== "original"
                       ? selectedSong.englishTitle
                       : selectedSong.title
                           .split(" ")
@@ -2047,7 +2316,9 @@ export default function App() {
                 </h2>
                 <p>{selectedSong.subtitle}</p>
                 {selectedSong.licenseLabel && (
-                  <span className="public-domain-badge">
+                  <span
+                    className={`public-domain-badge ${selectedSong.category === "mandopop" ? "is-local-audio" : ""}`}
+                  >
                     {selectedSong.licenseLabel}
                   </span>
                 )}
@@ -2064,12 +2335,25 @@ export default function App() {
                     </span>
                   </div>
                 )}
-                {!chartResult.ok && (
-                  <div className="chart-error" role="alert">
-                    <b>谱面加载失败</b>
-                    {chartResult.errors.map((error) => (
-                      <span key={error}>{error}</span>
-                    ))}
+                {!chartResult.ok &&
+                  selectedSong.audioMode !== "local-import" && (
+                    <div className="chart-error" role="alert">
+                      <b>谱面加载失败</b>
+                      {chartResult.errors.map((error) => (
+                        <span key={error}>{error}</span>
+                      ))}
+                    </div>
+                  )}
+                {selectedSong.audioMode === "local-import" && (
+                  <div className="local-track-intro" role="status">
+                    <b>
+                      {selectedLocalAudio.status === "ready"
+                        ? "本地音频已就绪，可试听与校准"
+                        : "请选择你有权使用的本地音频"}
+                    </b>
+                    <span>
+                      正式谱面将在匹配音频版本并完成测量后制作，当前不能开始演奏。
+                    </span>
                   </div>
                 )}
                 {chartResult.ok && chartResult.warnings.length > 0 && (
@@ -2077,7 +2361,11 @@ export default function App() {
                     {chartResult.warnings.join(" ")}
                   </p>
                 )}
-                <small>在歌曲面板选择曲目与难度，然后开始演奏</small>
+                <small>
+                  {selectedSong.audioMode === "local-import"
+                    ? "文件只保留在当前浏览器内存中，刷新后需要重新选择"
+                    : "在歌曲面板选择曲目与难度，然后开始演奏"}
+                </small>
               </div>
             )}
 
@@ -2193,6 +2481,7 @@ export default function App() {
                 [
                   ["original", "原创电子"],
                   ["classical", "经典交响"],
+                  ["mandopop", "华语流行"],
                 ] as const
               ).map(([category, label]) => (
                 <button
@@ -2260,8 +2549,25 @@ export default function App() {
                       )}
                       <em>{song.artist}</em>
                       <span className="song-meta">
-                        {song.bpm} BPM · {formatClockTime(song.duration)}
+                        {songBpmLabel(song)} BPM ·{" "}
+                        {songDurationLabel(
+                          song,
+                          localAudioUi[song.id]?.duration,
+                        )}
                       </span>
+                      {song.audioMode === "local-import" && (
+                        <span
+                          className={`song-audio-status is-${localAudioUi[song.id]?.status ?? "missing"}`}
+                        >
+                          {localAudioUi[song.id]?.status === "ready"
+                            ? "● 已导入"
+                            : localAudioUi[song.id]?.status === "loading"
+                              ? "◌ 解码中"
+                              : localAudioUi[song.id]?.status === "error"
+                                ? "! 导入失败"
+                                : "○ 未导入"}
+                        </span>
+                      )}
                       {song.movement && (
                         <span className="song-work-meta">
                           {song.movement} · {song.workNumber}
@@ -2279,7 +2585,11 @@ export default function App() {
                     className={`song-preview-button ${previewSongId === song.id ? "is-playing" : ""}`}
                     onClick={() => void toggleSongPreview(song.id)}
                     disabled={
-                      isSettingsLocked || calibrationOpen || tutorialOpen
+                      isSettingsLocked ||
+                      calibrationOpen ||
+                      tutorialOpen ||
+                      (song.audioMode === "local-import" &&
+                        localAudioUi[song.id]?.status !== "ready")
                     }
                     aria-pressed={previewSongId === song.id}
                     aria-label={`${previewSongId === song.id ? "停止" : "试听"} ${song.title}`}
@@ -2288,12 +2598,135 @@ export default function App() {
                       {previewSongId === song.id ? "■" : "▶"}
                     </span>
                     <span className="preview-label">
-                      {previewSongId === song.id ? "停止" : "试听"}
+                      {localAudioUi[song.id]?.status === "loading"
+                        ? "解码"
+                        : previewSongId === song.id
+                          ? "停止"
+                          : "试听"}
                     </span>
                     <span className="preview-progress" aria-hidden="true">
                       <i />
                     </span>
                   </button>
+                  {song.id === menuSongId &&
+                    song.audioMode === "local-import" && (
+                      <div className="local-audio-panel">
+                        <div className="local-audio-heading">
+                          <b>本地音乐导入</b>
+                          <span>音频不会上传</span>
+                        </div>
+                        <p>
+                          请选择你拥有合法访问权的音频副本。文件仅在当前页面内解码，
+                          不会写入 localStorage 或发送网络请求。
+                        </p>
+                        <dl>
+                          <div>
+                            <dt>音频版本</dt>
+                            <dd>{song.audioVersion}</dd>
+                          </div>
+                          <div>
+                            <dt>实际时长</dt>
+                            <dd>
+                              {songDurationLabel(
+                                song,
+                                localAudioUi[song.id]?.duration,
+                              )}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>BPM / 变速</dt>
+                            <dd>待匹配音频后测量</dd>
+                          </div>
+                        </dl>
+                        <div className="local-audio-actions">
+                          <label
+                            className={`local-file-button ${localAudioUi[song.id]?.status === "loading" ? "is-disabled" : ""}`}
+                          >
+                            <span>
+                              {localAudioUi[song.id]?.status === "loading"
+                                ? "正在解码…"
+                                : localAudioUi[song.id]?.status === "ready"
+                                  ? "更换本地音频"
+                                  : "选择本地音频"}
+                            </span>
+                            <input
+                              type="file"
+                              accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm,.mp4"
+                              disabled={
+                                isSettingsLocked ||
+                                localAudioUi[song.id]?.status === "loading"
+                              }
+                              onChange={(event) => {
+                                const file = event.currentTarget.files?.[0];
+                                event.currentTarget.value = "";
+                                if (file) void importLocalAudio(song.id, file);
+                              }}
+                              aria-label={`为 ${song.title} 选择本地音频`}
+                            />
+                          </label>
+                          {localAudioUi[song.id]?.status === "ready" && (
+                            <button
+                              type="button"
+                              onClick={() => clearLocalAudio(song.id)}
+                            >
+                              释放音频
+                            </button>
+                          )}
+                        </div>
+                        <label
+                          className="local-offset-control"
+                          htmlFor={`local-offset-${song.id}`}
+                        >
+                          <span>
+                            <b>歌曲独立偏移</b>
+                            <output>
+                              {(localSongPreferences.entries[song.id]
+                                ?.userOffsetMs ?? 0) >= 0
+                                ? "+"
+                                : ""}
+                              {localSongPreferences.entries[song.id]
+                                ?.userOffsetMs ?? 0}
+                              ms
+                            </output>
+                          </span>
+                          <input
+                            id={`local-offset-${song.id}`}
+                            type="range"
+                            min={-500}
+                            max={500}
+                            step={1}
+                            value={
+                              localSongPreferences.entries[song.id]
+                                ?.userOffsetMs ?? 0
+                            }
+                            onChange={(event) =>
+                              updateLocalPreference(song.id, {
+                                userOffsetMs: Number(event.currentTarget.value),
+                              })
+                            }
+                            onKeyDown={(event) =>
+                              handleLocalOffsetKey(event, song.id)
+                            }
+                            aria-valuetext={`歌曲独立偏移 ${signedMilliseconds(localSongPreferences.entries[song.id]?.userOffsetMs ?? 0)}`}
+                          />
+                        </label>
+                        <div
+                          className={`local-audio-message is-${localAudioUi[song.id]?.validation?.status ?? localAudioUi[song.id]?.status ?? "missing"}`}
+                          role={
+                            localAudioUi[song.id]?.status === "error"
+                              ? "alert"
+                              : "status"
+                          }
+                        >
+                          {localAudioUi[song.id]?.message ??
+                            (localSongPreferences.entries[song.id]
+                              ?.lastDecodedDuration
+                              ? `上次已检测 ${formatClockTime(localSongPreferences.entries[song.id].lastDecodedDuration ?? 0)}，刷新后需重新选择文件。`
+                              : "未导入音频；试听与演奏已禁用。")}
+                        </div>
+                        <small>{song.copyrightNotice}</small>
+                      </div>
+                    )}
                 </div>
               ))}
             </div>
@@ -2302,6 +2735,7 @@ export default function App() {
               value={menuDifficulty}
               levels={difficultyLevels}
               details={difficultyDetails}
+              drafts={draftDifficultyDetails}
               disabled={isSettingsLocked}
               onChange={setMenuDifficulty}
             />
@@ -2343,7 +2777,11 @@ export default function App() {
                   closeTutorial(false);
                   setCalibrationOpen(true);
                 }}
-                disabled={isSettingsLocked}
+                disabled={
+                  isSettingsLocked ||
+                  (selectedSong.audioMode === "local-import" &&
+                    selectedLocalAudio.status !== "ready")
+                }
               >
                 延迟校准
               </button>
@@ -2368,7 +2806,13 @@ export default function App() {
                   onClick={() => void startGame()}
                   disabled={!chart}
                 >
-                  <span>{phase === "results" ? "再次演奏" : "开始演奏"}</span>
+                  <span>
+                    {selectedSong.audioMode === "local-import"
+                      ? "等待匹配音频与制谱"
+                      : phase === "results"
+                        ? "再次演奏"
+                        : "开始演奏"}
+                  </span>
                   <b>{phase === "results" ? "↻" : "▶"}</b>
                 </button>
               )}
@@ -2787,7 +3231,7 @@ export default function App() {
         <span>
           WEB AUDIO CLOCK / {RULESET.windowsMs.perfect}ms PERFECT WINDOW
         </span>
-        <span>ESC TO PAUSE · ORIGINAL SYNTHESIS · NO EXTERNAL ASSETS</span>
+        <span>ESC TO PAUSE · LOCAL FILES STAY ON DEVICE · NO UPLOADS</span>
       </footer>
 
       <ConfirmDialog
@@ -2800,13 +3244,24 @@ export default function App() {
         running={calibrationRunning}
         tappedBeats={calibrationTapCount}
         result={calibrationResult}
-        currentOffsetMs={settings.audioOffsetMs}
+        currentOffsetMs={
+          selectedSong.audioMode === "local-import"
+            ? (selectedLocalPreference?.userOffsetMs ?? 0)
+            : settings.audioOffsetMs
+        }
+        scopeLabel={
+          selectedSong.audioMode === "local-import"
+            ? `${selectedSong.title} · 歌曲独立偏移`
+            : "全局设备判定偏移"
+        }
         onClose={closeCalibration}
         onStart={() => void startCalibration()}
         onTap={recordCalibrationTap}
         onPreview={() => void previewCalibration()}
         onApply={(offsetMs) => {
-          updateSetting("audioOffsetMs", offsetMs);
+          if (selectedSong.audioMode === "local-import")
+            updateLocalPreference(selectedSong.id, { userOffsetMs: offsetMs });
+          else updateSetting("audioOffsetMs", offsetMs);
           void stopCalibration(true);
         }}
       />

@@ -50,7 +50,9 @@ describe("谱面解析和校验", () => {
   );
 
   it("所有谱面拥有独立描述并按曲目设计不同 Hold 数量", () => {
-    const charts = SONG_CATALOG.flatMap((song) =>
+    const charts = SONG_CATALOG.filter(
+      (song) => song.audioMode === "synth",
+    ).flatMap((song) =>
       (["easy", "normal", "hard"] as const).map((difficulty) => {
         const result = loadBuiltInChart(song.id, difficulty);
         if (!result.ok) throw new Error(result.errors.join("\n"));
@@ -153,4 +155,3 @@ describe("谱面解析和校验", () => {
     expect(result.errors.join("\n")).toMatch(/同时出现/);
   });
 });
-

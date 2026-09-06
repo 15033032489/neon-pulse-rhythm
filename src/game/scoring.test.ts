@@ -100,7 +100,9 @@ describe("计分、连击和准确率", () => {
   });
 
   it("全部内置谱面的主判定数等于音符数且 AP 满分严格一致", () => {
-    for (const song of SONG_CATALOG) {
+    for (const song of SONG_CATALOG.filter(
+      (candidate) => candidate.audioMode === "synth",
+    )) {
       for (const difficulty of ["easy", "normal", "hard"] as const) {
         const loaded = loadBuiltInChart(song.id, difficulty);
         if (!loaded.ok) throw new Error(loaded.errors.join("\n"));
